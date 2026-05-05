@@ -14,6 +14,8 @@ use crate::{
     http::REGISTRY_URL,
 };
 
+const NPM_USER_AGENT: &str = "npm/10.9.2 node/v22.12.0 win32 x64 workspaces/false";
+
 use super::command_handler::CommandHandler;
 use super::login::load_token;
 
@@ -151,7 +153,8 @@ async fn publish_tarball(
     let filename = format!("{}-{}.tgz", name.replace('/', "-").trim_start_matches('-'), version);
     let shasum = shasum_hex(&tarball);
     let integrity = integrity_sha512(&tarball);
-    let tarball_url = format!("{}/{}-/{}/-/{}", REGISTRY_URL, name, name, filename);
+    let name_encoded = name.replace('/', "%2F");
+    let tarball_url = format!("{}/{}-/{}/-/{}", REGISTRY_URL, name_encoded, name_encoded, filename);
     let tarball_len = tarball.len();
     let tarball_b64 = BASE64.encode(&tarball);
 
@@ -190,10 +193,11 @@ async fn publish_tarball(
     }
 
     let mut req = client
-        .put(format!("{}/{}", REGISTRY_URL, name))
+        .put(format!("{}/{}", REGISTRY_URL, name_encoded))
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {}", token))
+        .header("User-Agent", NPM_USER_AGENT)
         .body(body.to_string());
 
     if let Some(code) = otp {
@@ -202,6 +206,25 @@ async fn publish_tarball(
 
     let resp = req.send().await.map_err(CommandError::HTTPFailed)?;
     let status = resp.status();
+
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        let www_auth = resp
+            .headers()
+            .get("www-authenticate")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let is_otp = www_auth.contains("otp") || resp.headers().get("x-npm-otp").is_some();
+        let resp_body = resp.text().await.map_err(CommandError::FailedResponseText)?;
+        let body_wants_otp = resp_body.contains("one-time pass") || resp_body.contains("otp");
+        if is_otp || body_wants_otp {
+            return Err(CommandError::LoginFailed {
+                status: 401,
+                body: "registry requires a one-time password — re-run with: oxide publish --otp <code>".into(),
+            });
+        }
+        return Err(CommandError::LoginFailed { status: status.as_u16(), body: resp_body });
+    }
+
     let resp_body = resp.text().await.map_err(CommandError::FailedResponseText)?;
 
     if !status.is_success() {
