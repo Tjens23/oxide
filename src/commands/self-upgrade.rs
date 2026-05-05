@@ -9,14 +9,19 @@ use super::command_handler::CommandHandler;
 
 const GITHUB_API_LATEST: &str =
     "https://api.github.com/repos/tjens23/oxide/releases/latest";
-const GITHUB_DOWNLOAD_BASE: &str =
-    "https://github.com/tjens23/oxide/releases/download";
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Deserialize)]
+struct ReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Deserialize)]
 struct LatestRelease {
     tag_name: String,
+    assets: Vec<ReleaseAsset>,
 }
 
 #[derive(Default)]
@@ -64,10 +69,19 @@ impl CommandHandler for SelfUpgradeHandler {
             "oxide-linux"
         };
 
-        let url = format!("{}/{}/{}", GITHUB_DOWNLOAD_BASE, latest_tag, binary_name);
+        let asset = release.assets
+            .iter()
+            .find(|a| a.name == binary_name)
+            .ok_or_else(|| CommandError::LoginFailed {
+                status: 404,
+                body: format!(
+                    "'{}' not found in {} release assets — the pipeline may still be running, try again in a moment",
+                    binary_name, latest_tag
+                ),
+            })?;
 
         let response = client
-            .get(&url)
+            .get(&asset.browser_download_url)
             .send()
             .await
             .map_err(CommandError::HTTPFailed)?;
@@ -77,8 +91,8 @@ impl CommandHandler for SelfUpgradeHandler {
             return Err(CommandError::LoginFailed {
                 status: status.as_u16(),
                 body: format!(
-                    "could not download binary for {} — release asset may not be ready yet",
-                    latest_tag
+                    "failed to download {} (HTTP {})",
+                    binary_name, status.as_u16()
                 ),
             });
         }
@@ -100,19 +114,16 @@ impl CommandHandler for SelfUpgradeHandler {
 
         #[cfg(windows)]
         {
-            // Write to a .new file first — never write directly to the running exe path.
-            // Rename within the same directory is atomic and avoids Access Denied errors.
+
             let new_path = current_exe.with_extension("new");
             let old_path = current_exe.with_extension("old");
 
             if let Err(e) = std::fs::write(&new_path, &bytes) {
                 return Err(CommandError::FailedToWriteFile(e));
             }
-            // Shift: running exe → .old, new download → running exe path.
             std::fs::rename(&current_exe, &old_path)
                 .map_err(CommandError::FailedToWriteFile)?;
             if let Err(e) = std::fs::rename(&new_path, &current_exe) {
-                // Restore original if the final rename fails.
                 let _ = std::fs::rename(&old_path, &current_exe);
                 let _ = std::fs::remove_file(&new_path);
                 return Err(CommandError::FailedToWriteFile(e));
