@@ -2,6 +2,7 @@ pub mod command_handler;
 pub mod init;
 pub mod install;
 pub mod link;
+pub mod publish;
 pub mod uninstall;
 pub mod unlink;
 pub mod upgrade;
