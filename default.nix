@@ -10,7 +10,7 @@ pkgs.rustPlatform.buildRustPackage rec {
     owner = "Tjens23";
     repo = pname;
     rev = "v${version}";
-    hash = "sha256-xl3chkZsMfOmbWkVJzLcML8hXUsdVUexEo0dmbQyJjI=";
+    hash = "sha256-thYcZVE76AAJwJx24K+xV6HZ7oZwsi9NszdRcW/h0xk=";
   };
 
   cargoHash = "sha256-rT4ozLK1nGdKCytW+WT1zdKq4MVlCsLoTnmNRfRcElg=";
