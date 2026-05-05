@@ -1,7 +1,9 @@
 pub mod command_handler;
 pub mod init;
 pub mod install;
+pub mod link;
 pub mod uninstall;
+pub mod unlink;
 pub mod upgrade;
 pub mod login;
 #[path = "self-upgrade.rs"]
