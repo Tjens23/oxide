@@ -1,6 +1,7 @@
 pub mod command_handler;
 pub mod exec;
 pub mod init;
+pub mod run;
 pub mod install;
 pub mod link;
 pub mod publish;
