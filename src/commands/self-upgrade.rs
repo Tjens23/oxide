@@ -100,11 +100,21 @@ impl CommandHandler for SelfUpgradeHandler {
 
         #[cfg(windows)]
         {
+            // Write to a .new file first — never write directly to the running exe path.
+            // Rename within the same directory is atomic and avoids Access Denied errors.
+            let new_path = current_exe.with_extension("new");
             let old_path = current_exe.with_extension("old");
+
+            if let Err(e) = std::fs::write(&new_path, &bytes) {
+                return Err(CommandError::FailedToWriteFile(e));
+            }
+            // Shift: running exe → .old, new download → running exe path.
             std::fs::rename(&current_exe, &old_path)
                 .map_err(CommandError::FailedToWriteFile)?;
-            if let Err(e) = std::fs::write(&current_exe, &bytes) {
+            if let Err(e) = std::fs::rename(&new_path, &current_exe) {
+                // Restore original if the final rename fails.
                 let _ = std::fs::rename(&old_path, &current_exe);
+                let _ = std::fs::remove_file(&new_path);
                 return Err(CommandError::FailedToWriteFile(e));
             }
             let _ = std::fs::remove_file(&old_path);
