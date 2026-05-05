@@ -1,15 +1,23 @@
 use std::env::Args;
 
 use async_trait::async_trait;
+use serde::Deserialize;
 
 use crate::errors::{CommandError, ParseError};
 
 use super::command_handler::CommandHandler;
 
-const RELEASE_BASE_URL: &str =
-    "https://github.com/tjens23/oxide/releases/";
+const GITHUB_API_LATEST: &str =
+    "https://api.github.com/repos/tjens23/oxide/releases/latest";
+const GITHUB_DOWNLOAD_BASE: &str =
+    "https://github.com/tjens23/oxide/releases/download";
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Deserialize)]
+struct LatestRelease {
+    tag_name: String,
+}
 
 #[derive(Default)]
 pub struct SelfUpgradeHandler;
@@ -21,7 +29,33 @@ impl CommandHandler for SelfUpgradeHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
-        println!("Upgrading oxide (current: v{})..", CURRENT_VERSION);
+        let client = reqwest::Client::builder()
+            .user_agent("oxide-self-upgrade")
+            .build()
+            .map_err(CommandError::HTTPFailed)?;
+
+        // Fetch latest release tag from GitHub API.
+        let release: LatestRelease = client
+            .get(GITHUB_API_LATEST)
+            .send()
+            .await
+            .map_err(CommandError::HTTPFailed)?
+            .json()
+            .await
+            .map_err(CommandError::HTTPFailed)?;
+
+        let latest_tag = release.tag_name; // e.g. "v0.5.1"
+        let latest_version = latest_tag.trim_start_matches('v');
+
+        if latest_version == CURRENT_VERSION {
+            println!("oxide is already up to date (v{}).", CURRENT_VERSION);
+            return Ok(());
+        }
+
+        println!(
+            "Upgrading oxide: v{} → {} …",
+            CURRENT_VERSION, latest_tag
+        );
 
         let binary_name = if cfg!(target_os = "windows") {
             "oxide-windows.exe"
@@ -31,14 +65,14 @@ impl CommandHandler for SelfUpgradeHandler {
             "oxide-linux"
         };
 
-        let url = format!("{}/{}", RELEASE_BASE_URL, binary_name);
-        let client = reqwest::Client::new();
-        let response = client
+        // e.g. https://github.com/.../releases/download/v0.5.1/oxide-windows.exe
+        let url = format!("{}/{}/{}", GITHUB_DOWNLOAD_BASE, latest_tag, binary_name);
+
+        let bytes = client
             .get(&url)
             .send()
             .await
-            .map_err(CommandError::HTTPFailed)?;
-        let bytes = response
+            .map_err(CommandError::HTTPFailed)?
             .bytes()
             .await
             .map_err(CommandError::FailedResponseBytes)?;
@@ -48,12 +82,10 @@ impl CommandHandler for SelfUpgradeHandler {
 
         #[cfg(windows)]
         {
-            // On Windows, rename the running binary (allowed) then write the new one.
             let old_path = current_exe.with_extension("old");
             std::fs::rename(&current_exe, &old_path)
                 .map_err(CommandError::FailedToWriteFile)?;
             if let Err(e) = std::fs::write(&current_exe, &bytes) {
-                // Restore the original binary if the write fails.
                 let _ = std::fs::rename(&old_path, &current_exe);
                 return Err(CommandError::FailedToWriteFile(e));
             }
@@ -76,7 +108,7 @@ impl CommandHandler for SelfUpgradeHandler {
                 .map_err(CommandError::FailedToWriteFile)?;
         }
 
-        println!("oxide upgraded successfully.");
+        println!("oxide upgraded to {} successfully.", latest_tag);
         Ok(())
     }
 }
