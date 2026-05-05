@@ -66,14 +66,34 @@ impl CommandHandler for SelfUpgradeHandler {
 
         let url = format!("{}/{}/{}", GITHUB_DOWNLOAD_BASE, latest_tag, binary_name);
 
-        let bytes = client
+        let response = client
             .get(&url)
             .send()
             .await
-            .map_err(CommandError::HTTPFailed)?
+            .map_err(CommandError::HTTPFailed)?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(CommandError::LoginFailed {
+                status: status.as_u16(),
+                body: format!(
+                    "could not download binary for {} — release asset may not be ready yet",
+                    latest_tag
+                ),
+            });
+        }
+
+        let bytes = response
             .bytes()
             .await
             .map_err(CommandError::FailedResponseBytes)?;
+
+        if bytes.len() < 1024 {
+            return Err(CommandError::GitFailed(format!(
+                "downloaded binary is suspiciously small ({} bytes) — aborting to avoid corrupting the installation",
+                bytes.len()
+            )));
+        }
 
         let current_exe =
             std::env::current_exe().map_err(CommandError::FailedToWriteFile)?;
