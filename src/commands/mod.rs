@@ -7,5 +7,6 @@ pub mod uninstall;
 pub mod unlink;
 pub mod upgrade;
 pub mod login;
+pub mod version;
 #[path = "self-upgrade.rs"]
 pub mod self_upgrade;

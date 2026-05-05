@@ -41,4 +41,8 @@ pub enum CommandError {
     OtpRequired,
     #[error("login timed out: browser login was not completed within the allowed time")]
     LoginTimedOut,
+    #[error("failed to read file ({0})")]
+    FailedToReadFile(Error),
+    #[error("git command failed: {0}")]
+    GitFailed(String),
 }

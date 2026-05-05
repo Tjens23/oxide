@@ -34,7 +34,6 @@ impl CommandHandler for SelfUpgradeHandler {
             .build()
             .map_err(CommandError::HTTPFailed)?;
 
-        // Fetch latest release tag from GitHub API.
         let release: LatestRelease = client
             .get(GITHUB_API_LATEST)
             .send()
@@ -65,7 +64,6 @@ impl CommandHandler for SelfUpgradeHandler {
             "oxide-linux"
         };
 
-        // e.g. https://github.com/.../releases/download/v0.5.1/oxide-windows.exe
         let url = format!("{}/{}/{}", GITHUB_DOWNLOAD_BASE, latest_tag, binary_name);
 
         let bytes = client

@@ -14,6 +14,7 @@ use super::self_upgrade::SelfUpgradeHandler;
 use super::uninstall::UninstallHandler;
 use super::unlink::UnlinkHandler;
 use super::upgrade::UpgradeHandler;
+use super::version::VersionHandler;
 
 #[async_trait]
 pub trait CommandHandler {
@@ -32,6 +33,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
                 ("uninstall", "Uninstall a package"),
                 ("upgrade", "Upgrade a package"),
                 ("self-upgrade", "Upgrade the oxide tool itself"),
+                ("version", "Bump package.json version, commit, and create a git tag"),
                 ("init", "Initialize a new project with a package.json"),                ("link", "Link a package globally or into node_modules"),
                 ("unlink", "Remove a linked package"),                ("publish", "Publish a package to the npm registry"),
                 ("login", "Authenticate with the npm registry to allow installing private packages"),
@@ -52,6 +54,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "link" | "ln" => Box::new(LinkHandler::default()),
         "unlink" => Box::new(UnlinkHandler::default()),
         "publish" => Box::new(PublishHandler::default()),
+        "version" => Box::new(VersionHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
 
