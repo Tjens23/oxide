@@ -9,6 +9,7 @@ use crate::errors::{
 use super::init::InitHandler;
 use super::install::InstallHandler;
 use super::link::LinkHandler;
+use super::publish::PublishHandler;
 use super::self_upgrade::SelfUpgradeHandler;
 use super::uninstall::UninstallHandler;
 use super::unlink::UnlinkHandler;
@@ -32,7 +33,8 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
                 ("upgrade", "Upgrade a package"),
                 ("self-upgrade", "Upgrade the oxide tool itself"),
                 ("init", "Initialize a new project with a package.json"),                ("link", "Link a package globally or into node_modules"),
-                ("unlink", "Remove a linked package"),                ("login", "Authenticate with the npm registry to allow installing private packages"),
+                ("unlink", "Remove a linked package"),                ("publish", "Publish a package to the npm registry"),
+                ("login", "Authenticate with the npm registry to allow installing private packages"),
             ] {
                 println!("  {:<12} {}", name, description);
             }
@@ -49,6 +51,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "install" => Box::new(InstallHandler::default()),
         "link" | "ln" => Box::new(LinkHandler::default()),
         "unlink" => Box::new(UnlinkHandler::default()),
+        "publish" => Box::new(PublishHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
 
