@@ -1,0 +1,59 @@
+use async_trait::async_trait;
+use std::env::Args;
+
+use crate::errors::{
+    CommandError,
+    ParseError::{self, CommandNotFound},
+};
+
+use super::init::InitHandler;
+use super::install::InstallHandler;
+use super::self_upgrade::SelfUpgradeHandler;
+use super::uninstall::UninstallHandler;
+use super::upgrade::UpgradeHandler;
+
+#[async_trait]
+pub trait CommandHandler {
+    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError>;
+    async fn execute(&self) -> Result<(), CommandError>;
+}
+
+pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
+    args.next(); 
+
+    let command = match args.next() {
+        Some(command) => command,
+        None => {
+           for (name, description) in [
+                ("install", "Install a package"),
+                ("uninstall", "Uninstall a package"),
+                ("upgrade", "Upgrade a package"),
+                ("self-upgrade", "Upgrade the oxide tool itself"),
+                ("init", "Initialize a new project with a package.json"),
+                ("login", "Authenticate with the npm registry to allow installing private packages"),
+            ] {
+                println!("  {:<12} {}", name, description);
+            }
+            return Ok(());
+        }
+    };
+
+    let mut command_handler: Box<dyn CommandHandler> = match command.to_lowercase().as_str() {
+        "login" => Box::new(super::login::LoginHandler::default()),
+        "uninstall" => Box::new(UninstallHandler::default()),
+        "upgrade" => Box::new(UpgradeHandler::default()),
+        "self-upgrade" => Box::new(SelfUpgradeHandler::default()),
+        "init" => Box::new(InitHandler::default()),
+        "install" => Box::new(InstallHandler::default()),
+        _ => return Err(CommandNotFound(command.to_string())),
+    };
+
+    command_handler.parse(&mut args)?;
+    let command_result = command_handler.execute().await;
+
+    if let Err(e) = command_result {
+        println!("Command error: {e}");
+    }
+
+    Ok(())
+}
