@@ -1,4 +1,5 @@
 pub mod command_handler;
+pub mod exec;
 pub mod init;
 pub mod install;
 pub mod link;

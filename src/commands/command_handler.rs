@@ -6,6 +6,7 @@ use crate::errors::{
     ParseError::{self, CommandNotFound},
 };
 
+use super::exec::ExecHandler;
 use super::init::InitHandler;
 use super::install::InstallHandler;
 use super::link::LinkHandler;
@@ -33,6 +34,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
                 ("uninstall", "Uninstall a package"),
                 ("upgrade", "Upgrade a package"),
                 ("self-upgrade", "Upgrade the oxide tool itself"),
+                ("exec", "Execute a binary from node_modules/.bin"),
                 ("version", "Bump package.json version, commit, and create a git tag"),
                 ("init", "Initialize a new project with a package.json"),                ("link", "Link a package globally or into node_modules"),
                 ("unlink", "Remove a linked package"),                ("publish", "Publish a package to the npm registry"),
@@ -54,6 +56,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "link" | "ln" => Box::new(LinkHandler::default()),
         "unlink" => Box::new(UnlinkHandler::default()),
         "publish" => Box::new(PublishHandler::default()),
+        "exec" | "x" => Box::new(ExecHandler::default()),
         "version" => Box::new(VersionHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
