@@ -69,4 +69,40 @@ mod tests {
         let args = vec!["publish".to_string()];
         handler.parse(&mut args.into_iter()).unwrap();
     }
+
+    #[test]
+    fn test_outdated_command() {
+        let mut handler = OutdatedHandler::default();
+        let args = vec!["outdated".to_string()];
+        handler.parse(&mut args.into_iter()).unwrap();
+    }
+
+    #[test]
+    fn test_ls_command() {
+        let mut handler = LsHandler::default();
+        let args = vec!["ls".to_string()];
+        handler.parse(&mut args.into_iter()).unwrap();
+    }
+    
+    #[test]
+    fn test_pack_command() {
+        let mut handler = PackHandler::default();
+        let args = vec!["pack".to_string()];
+        handler.parse(&mut args.into_iter()).unwrap();
+    }
+
+    #[test]
+    fn test_doctor_command() {
+        let mut handler = DoctorHandler::default();
+        let args = vec!["doctor".to_string()];
+        handler.parse(&mut args.into_iter()).unwrap();
+    }
+
+    #[test]
+    fn test_dlx_command() {
+        let mut handler = DlxHandler::default();
+        let args = vec!["dlx".to_string(), "lodash".to_string()];
+        handler.parse(&mut args.into_iter()).unwrap();
+    }
+
 }

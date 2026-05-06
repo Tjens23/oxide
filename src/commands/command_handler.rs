@@ -17,6 +17,12 @@ use super::uninstall::UninstallHandler;
 use super::unlink::UnlinkHandler;
 use super::upgrade::UpgradeHandler;
 use super::version::VersionHandler;
+use super::outdated::OutdatedHandler;
+use super::why::WhyHandler;
+use super::ls::LsHandler;
+use super::pack::PackHandler;
+use super::doctor::DoctorHandler;
+use super::dlx::DlxHandler;
 
 #[async_trait]
 pub trait CommandHandler {
@@ -41,6 +47,12 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
                 ("init", "Initialize a new project with a package.json"),                ("link", "Link a package globally or into node_modules"),
                 ("unlink", "Remove a linked package"),                ("publish", "Publish a package to the npm registry"),
                 ("login", "Authenticate with the npm registry to allow installing private packages"),
+                ("outdated", "List dependencies with available updates"),
+                ("why", "Explain why a package is installed"),
+                ("ls", "List installed packages"),
+                ("pack", "Create a publishable .tgz tarball locally"),
+                ("doctor", "Check project health and environment"),
+                ("dlx", "Fetch and run a package binary without installing it"),
             ] {
                 println!("  {:<12} {}", name, description);
             }
@@ -61,6 +73,12 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "exec" | "x" => Box::new(ExecHandler::default()),
         "run" => Box::new(RunHandler::default()),
         "version" => Box::new(VersionHandler::default()),
+        "outdated" => Box::new(OutdatedHandler::default()),
+        "why" => Box::new(WhyHandler::default()),
+        "ls" | "list" => Box::new(LsHandler::default()),
+        "pack" => Box::new(PackHandler::default()),
+        "doctor" | "check" => Box::new(DoctorHandler::default()),
+        "dlx" | "bunx" => Box::new(DlxHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
 

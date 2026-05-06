@@ -31,7 +31,7 @@ const ALWAYS_IGNORE: &[&str] = &[
     "CVS",
 ];
 
-fn read_ignore_patterns(dir: &Path) -> Vec<String> {
+pub(crate) fn read_ignore_patterns(dir: &Path) -> Vec<String> {
     let npmignore = dir.join(".npmignore");
     let gitignore = dir.join(".gitignore");
 
@@ -45,7 +45,7 @@ fn read_ignore_patterns(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
+pub(crate) fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
     let first = rel.split(['/', '\\']).next().unwrap_or("");
 
     if ALWAYS_IGNORE.iter().any(|p| first == *p) {
@@ -63,7 +63,7 @@ fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
     false
 }
 
-fn collect_files(dir: &Path, user_patterns: &[String]) -> Result<Vec<PathBuf>, CommandError> {
+pub(crate) fn collect_files(dir: &Path, user_patterns: &[String]) -> Result<Vec<PathBuf>, CommandError> {
     let mut files = Vec::new();
     collect_recursive(dir, dir, user_patterns, &mut files)?;
     Ok(files)
@@ -97,7 +97,7 @@ fn collect_recursive(
     Ok(())
 }
 
-fn pack(dir: &Path) -> Result<Vec<u8>, CommandError> {
+pub(crate) fn pack(dir: &Path) -> Result<Vec<u8>, CommandError> {
     let patterns = read_ignore_patterns(dir);
     let files = collect_files(dir, &patterns)?;
 
