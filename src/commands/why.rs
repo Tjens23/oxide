@@ -1,4 +1,3 @@
-use std::env::Args;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -14,7 +13,7 @@ pub struct WhyHandler {
 
 #[async_trait]
 impl CommandHandler for WhyHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         self.package_name = args
             .next()
             .ok_or_else(|| ParseError::MissingArgument("<package>".to_string()))?;

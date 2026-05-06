@@ -1,7 +1,4 @@
-use std::{
-    env::Args,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -250,7 +247,7 @@ pub struct PublishHandler {
 
 #[async_trait]
 impl CommandHandler for PublishHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--tag" => {

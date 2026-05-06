@@ -1,4 +1,3 @@
-use std::env::Args;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -20,8 +19,8 @@ struct InstalledPkg {
 
 #[async_trait]
 impl CommandHandler for LsHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
-        for arg in args.by_ref() {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
+        for arg in args {
             match arg.as_str() {
                 "--all" | "-a" | "--dev" => self.all = true,
                 _ => {}

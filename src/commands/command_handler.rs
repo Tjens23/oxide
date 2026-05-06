@@ -23,10 +23,12 @@ use super::ls::LsHandler;
 use super::pack::PackHandler;
 use super::doctor::DoctorHandler;
 use super::dlx::DlxHandler;
+use super::workspaces::WorkspacesHandler;
+use super::foreach::ForeachHandler;
 
 #[async_trait]
 pub trait CommandHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError>;
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError>;
     async fn execute(&self) -> Result<(), CommandError>;
 }
 
@@ -53,6 +55,8 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
                 ("pack", "Create a publishable .tgz tarball locally"),
                 ("doctor", "Check project health and environment"),
                 ("dlx", "Fetch and run a package binary without installing it"),
+                ("workspaces", "List workspace packages defined in this monorepo"),
+                ("foreach", "Run a script across workspace packages"),
             ] {
                 println!("  {:<12} {}", name, description);
             }
@@ -79,6 +83,8 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "pack" => Box::new(PackHandler::default()),
         "doctor" | "check" => Box::new(DoctorHandler::default()),
         "dlx" | "bunx" => Box::new(DlxHandler::default()),
+        "workspaces" | "ws" => Box::new(WorkspacesHandler::default()),
+        "foreach" | "each" => Box::new(ForeachHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
 

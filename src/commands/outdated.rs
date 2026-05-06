@@ -1,4 +1,3 @@
-use std::env::Args;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -20,7 +19,7 @@ struct PackageStatus {
 
 #[async_trait]
 impl CommandHandler for OutdatedHandler {
-    fn parse(&mut self, _args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, _args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         Ok(())
     }
 

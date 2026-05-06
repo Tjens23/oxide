@@ -1,4 +1,4 @@
-use std::{env::Args, path::Path};
+use std::path::Path;
 
 use async_trait::async_trait;
 
@@ -80,7 +80,7 @@ pub struct UnlinkHandler {
 
 #[async_trait]
 impl CommandHandler for UnlinkHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--global" | "-g" => self.global = true,

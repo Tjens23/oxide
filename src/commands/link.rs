@@ -1,7 +1,4 @@
-use std::{
-    env::Args,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -107,7 +104,7 @@ pub struct LinkHandler {
 
 #[async_trait]
 impl CommandHandler for LinkHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         self.target = args.next();
         Ok(())
     }

@@ -1,4 +1,4 @@
-use std::{env::Args, path::PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -15,7 +15,7 @@ pub struct PackHandler {
 
 #[async_trait]
 impl CommandHandler for PackHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         let mut peekable = args.peekable();
         while let Some(arg) = peekable.next() {
             if arg == "--out-dir" {

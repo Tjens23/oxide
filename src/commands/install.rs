@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    env::Args,
     fs::File,
     io::Write,
     sync::{Arc, Mutex},
@@ -16,6 +15,7 @@ use crate::{
     installer::{DependencyMapMutex, InstallContext, Installer, PackageInfo},
     util::TaskAllocator,
     versions::Versions,
+    workspace,
 };
 
 use super::command_handler::CommandHandler;
@@ -23,7 +23,8 @@ use super::command_handler::CommandHandler;
 #[derive(Default)]
 pub struct InstallHandler {
     pub package_name: String,
-    pub semantic_version: Option<VersionReq>, // If None then assume latest version.
+    pub semantic_version: Option<VersionReq>,
+    filter: Option<String>,
 }
 
 impl InstallHandler {
@@ -31,6 +32,7 @@ impl InstallHandler {
         Self {
             package_name,
             semantic_version: None,
+            filter: None,
         }
     }
 }
@@ -72,8 +74,6 @@ impl InstallHandler {
                 .write_all(package_lock_string.as_bytes())
                 .map_err(CommandError::FailedToWriteFile)?;
 
-            // Create cache-level node_modules so Node.js can resolve deps from
-            // the real (cache) path rather than the project's node_modules.
             let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package_name);
             std::fs::create_dir_all(&cache_nm).map_err(CommandError::FailedToCreateFile)?;
 
@@ -98,8 +98,27 @@ impl InstallHandler {
 
 #[async_trait]
 impl CommandHandler for InstallHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
-        let package_details = args
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
+        let mut rest: Vec<String> = args.collect();
+
+        let mut i = 0;
+        while i < rest.len() {
+            match rest[i].as_str() {
+                "--filter" | "-F" => {
+                    let pat = rest
+                        .get(i + 1)
+                        .cloned()
+                        .ok_or_else(|| ParseError::MissingArgument("--filter <pattern>".to_string()))?;
+                    self.filter = Some(pat);
+                    rest.remove(i);
+                    rest.remove(i);
+                }
+                _ => i += 1,
+            }
+        }
+
+        let package_details = rest
+            .into_iter()
             .next()
             .ok_or(ParseError::MissingArgument(String::from("package name")))?;
 
@@ -112,6 +131,33 @@ impl CommandHandler for InstallHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
+        if let Some(ref filter) = self.filter {
+            let root = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
+            let packages = workspace::discover(&root)?;
+            let matched = workspace::apply_filter(&packages, filter);
+
+            if matched.is_empty() {
+                println!("No workspace packages matched filter '{}'.", filter);
+                return Ok(());
+            }
+
+            for pkg in &matched {
+                println!("\n[{}] installing '{}'..", pkg.name, self.package_name);
+                std::env::set_current_dir(&pkg.path)
+                    .map_err(CommandError::FailedToWriteFile)?;
+                Box::pin(self.execute_single()).await?;
+            }
+
+            std::env::set_current_dir(&root).map_err(CommandError::FailedToWriteFile)?;
+            return Ok(());
+        }
+
+        self.execute_single().await
+    }
+}
+
+impl InstallHandler {
+    async fn execute_single(&self) -> Result<(), CommandError> {
         // In future we could automatically find a version that is valid for both limits to save storage, but that's not neccessary right now
         println!("Installing '{}'..", self.package_name);
 
