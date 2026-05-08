@@ -49,7 +49,6 @@ pub(crate) fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
         return true;
     }
 
-    // User patterns: simple prefix / exact match.
     for pattern in user_patterns {
         let p = pattern.trim_start_matches('/');
         if rel == p || rel.starts_with(&format!("{}/", p)) || first == p {

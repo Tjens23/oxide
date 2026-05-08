@@ -417,3 +417,55 @@ fn test_workspace_discover_sorted_by_name() {
 
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[cfg(test)]
+mod integrity_tests {
+    use bytes::Bytes;
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+    use sha2::{Digest, Sha512};
+    use crate::util::verify_integrity;
+
+    fn make_integrity(data: &[u8]) -> String {
+        let digest = Sha512::digest(data);
+        format!("sha512-{}", BASE64.encode(digest.as_slice()))
+    }
+
+    #[test]
+    fn test_valid_integrity() {
+        let data = b"hello world";
+        let bytes = Bytes::from_static(data);
+        let integrity = make_integrity(data);
+        assert!(verify_integrity(&bytes, &integrity));
+    }
+
+    #[test]
+    fn test_tampered_bytes_fail() {
+        let data = b"hello world";
+        let tampered = Bytes::from_static(b"hello world!");  // one extra char
+        let integrity = make_integrity(data);
+        assert!(!verify_integrity(&tampered, &integrity));
+    }
+
+    #[test]
+    fn test_empty_bytes() {
+        let data = b"";
+        let bytes = Bytes::from_static(data);
+        let integrity = make_integrity(data);
+        assert!(verify_integrity(&bytes, &integrity));
+    }
+
+    #[test]
+    fn test_unknown_algorithm_rejected() {
+        let bytes = Bytes::from_static(b"hello");
+        // sha256 prefix — not supported, should return false
+        assert!(!verify_integrity(&bytes, "sha256-abc123"));
+    }
+
+    #[test]
+    fn test_malformed_integrity_string() {
+        let bytes = Bytes::from_static(b"hello");
+        assert!(!verify_integrity(&bytes, "not-an-integrity-string"));
+        assert!(!verify_integrity(&bytes, "sha512-"));       // empty digest
+        assert!(!verify_integrity(&bytes, "sha512-!!!!!!"));  // invalid base64
+    }
+}

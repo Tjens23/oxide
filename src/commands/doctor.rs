@@ -35,7 +35,6 @@ impl CommandHandler for DoctorHandler {
     async fn execute(&self) -> Result<(), CommandError> {
         let mut checks: Vec<Check> = Vec::new();
 
-        // 1. package.json readable + valid JSON
         let pkg_json: Option<Value> = match std::fs::read_to_string("./package.json") {
             Ok(raw) => match serde_json::from_str::<Value>(&raw) {
                 Ok(v) => {
@@ -53,7 +52,6 @@ impl CommandHandler for DoctorHandler {
             }
         };
 
-        // 2. node_modules exists
         if std::path::Path::new("./node_modules").exists() {
             checks.push(Check::pass("node_modules", "present"));
         } else {
@@ -63,7 +61,6 @@ impl CommandHandler for DoctorHandler {
             ));
         }
 
-        // 3. All declared dependencies are installed
         if let Some(ref json) = pkg_json {
             let (dep_checks, missing) = verify_deps(json);
             checks.extend(dep_checks);
@@ -78,7 +75,6 @@ impl CommandHandler for DoctorHandler {
             }
         }
 
-        // 4. Registry reachable
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -99,7 +95,6 @@ impl CommandHandler for DoctorHandler {
             }
         }
 
-        // 5. Auth token present
         match load_token() {
             Some(_) => checks.push(Check::pass("auth token", "found in credential store")),
             None => checks.push(Check::fail(
@@ -108,7 +103,6 @@ impl CommandHandler for DoctorHandler {
             )),
         }
 
-        // Print results
         println!("{:<20} {:<8} {}", "Check", "Status", "Detail");
         println!("{}", "-".repeat(72));
 
@@ -132,8 +126,6 @@ impl CommandHandler for DoctorHandler {
     }
 }
 
-/// Returns a list of per-package checks and the count of missing packages.
-/// Only reports failures to keep output concise.
 fn verify_deps(json: &Value) -> (Vec<Check>, usize) {
     let mut checks = Vec::new();
     let mut missing = 0usize;

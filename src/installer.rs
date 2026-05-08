@@ -31,7 +31,6 @@ pub struct InstallContext {
 
 pub struct Installer;
 impl Installer {
-    /// Gets the version data taking in the full version rather than resolving it on its own.
     pub async fn get_version_data(
         client: reqwest::Client,
         package_name: &String,
@@ -52,10 +51,6 @@ impl Installer {
             .expect("Failed to find resolved package version in package data"))
     }
 
-    // NOTE(conaticus): To save storage space, it might be an idea to check if the semantic version matches,
-    // rather than installing an whole new version, however this is an uncommon case due to how we handle version resolution so it's not a big deal.
-    /// Returns true if a given dependency's version has been/will be installed to avoid unneccesary duplicate installs
-    /// If the dependency is not in the hashmap, it will be added to the hashmap for further checks.
     fn already_resolved(context: &InstallContext, package_info: &PackageInfo) -> bool {
         let mut dependency_map = context.dependency_map_mux.lock().unwrap();
         let stringified_version = Versions::stringify(
@@ -77,7 +72,6 @@ impl Installer {
         }
     }
 
-    /// Append a version to a specific parent version, this hashmap will be used to generate package lock files.
     fn append_version(
         parents_mux: Arc<Mutex<Vec<String>>>,
         new_version_name: String,
@@ -136,10 +130,13 @@ impl Installer {
 
             if !already_extracted {
                 let package_bytes =
-                    HTTPRequest::get_bytes(context.client.clone(), version_data.dist.tarball)
+                    HTTPRequest::get_bytes(context.client.clone(), version_data.dist.tarball.clone())
                         .await
                         .unwrap();
-
+                if !version_data.dist.verify(&package_bytes) {
+                    eprintln!("'{}': {}", stringified, CommandError::IntegrityCheckFailed);
+                    return;
+                }
                 let dest = package_destination.clone();
                 let strf = stringified.clone();
                 TaskAllocator::add_blocking(move || {
@@ -218,7 +215,6 @@ impl Installer {
         }
     }
 
-    /// Creates the node modules folder if it is not present.
     pub fn create_modules_dir() {
         if Path::new("./node_modules").exists() {
             return;

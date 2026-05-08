@@ -13,9 +13,23 @@ pub struct VersionData {
 #[derive(Debug, Deserialize)]
 pub struct Dist {
     pub tarball: String,
+    pub integrity: Option<String>,
+    pub shasum: Option<String>,
 }
 
-// This does not include the full package data as we don't need it at the moment.
+impl Dist {
+    pub fn verify(&self, bytes: &bytes::Bytes) -> bool {
+        use crate::util;
+        if let Some(ref integrity) = self.integrity {
+            util::verify_integrity(bytes, integrity)
+        } else if let Some(ref shasum) = self.shasum {
+            util::verify_shasum(bytes, shasum)
+        } else {
+            true
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct PackageData {
     pub versions: HashMap<String, VersionData>,
