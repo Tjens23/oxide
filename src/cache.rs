@@ -36,8 +36,6 @@ lazy_static! {
 
 pub struct Cache;
 impl Cache {
-    /// Returns a hashmap, each key is formatted as package@version
-    /// and the value is a boolean of whether the package is the latest version or not.
     pub fn get_cached_versions() -> CachedVersions {
         fs_sync::create_dir_all(CACHE_DIRECTORY.to_string())
             .expect("Failed to create cache directory");
@@ -51,7 +49,6 @@ impl Cache {
         for entry in dir_contents.flatten() {
             let filename = entry.file_name().to_string_lossy().to_string();
             if filename.starts_with('@') {
-                // Scope directory (e.g. "@discordjs") — recurse into it
                 let scope_dir = format!("{}/{}", *CACHE_DIRECTORY, filename);
                 if let Ok(scope_contents) = fs_sync::read_dir(&scope_dir) {
                     for scope_entry in scope_contents.flatten() {
@@ -95,8 +92,6 @@ impl Cache {
         cached_versions
     }
 
-    /// Checks if a package with a valid version matching with `semantic_version` is already in the cache
-    /// and returns `true` if so, `false` if otherwise, as well as the resolved version if it exists
     pub async fn exists(
         package_name: &String,
         version: Option<&String>,
@@ -116,7 +111,6 @@ impl Cache {
 
         let semantic_version = semantic_version.unwrap();
 
-        // Scoped packages (e.g. "@scope/name") are stored under a scope subdirectory.
         if package_name.starts_with('@') {
             if let Some(slash_pos) = package_name.find('/') {
                 let scope = &package_name[..slash_pos];
@@ -183,8 +177,6 @@ impl Cache {
         }
     }
 
-    /// Checks if the latest version exists in the cache.
-    /// This is checked by reading if the package lock has the latest property as true.
     pub fn get_latest_version_in_cache(package_name: &String) -> Option<String> {
         let cached_version = CACHED_VERSIONS.get(package_name);
         match cached_version {
@@ -193,7 +185,6 @@ impl Cache {
         }
     }
 
-    /// Package string is formated as package@version
     pub fn load_cached_version(package: String) {
         let lockfile_path = format!(
             "{}/{}/package/oxide-lock.json",

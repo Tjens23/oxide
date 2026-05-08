@@ -10,8 +10,24 @@ use bytes::Bytes;
 use flate2::bufread::GzDecoder;
 use tar::Archive;
 use tokio::task::JoinHandle;
-
 use crate::errors::CommandError;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use sha2::{Digest, Sha512};
+
+pub fn verify_integrity(bytes: &Bytes, integrity: &str) -> bool {
+    if let Some(encoded) = integrity.strip_prefix("sha512-") {
+        let digest = Sha512::digest(bytes);
+        return BASE64.encode(digest.as_slice()) == encoded;
+    }
+    false
+}
+
+pub fn verify_shasum(bytes: &Bytes, expected_hex: &str) -> bool {
+    use sha1::Digest as _;
+    let digest = sha1::Sha1::digest(bytes);
+    let hex: String = digest.iter().map(|b| format!("{:02x}", b)).collect();
+    hex == expected_hex
+}
 
 pub fn create_dir_link(src: &str, dest: &str) -> std::io::Result<()> {
     #[cfg(windows)]
@@ -29,7 +45,6 @@ pub fn extract_tarball(bytes: Bytes, dest: String) -> Result<(), CommandError> {
     let gz = GzDecoder::new(bytes);
     let mut archive = Archive::new(gz);
 
-    // All tarballs contain a /package directory to the module source, this should be removed later to keep things as clean as possible
     archive
         .unpack(&dest)
         .map_err(CommandError::ExtractionFailed)

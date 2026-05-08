@@ -15,7 +15,6 @@ pub const EMPTY_VERSION: Version = Version::new(0, 0, 0);
 pub struct Versions;
 
 impl Versions {
-    /// Parses a raw "name@version" filename into `(name, version)`.
     pub fn parse_raw_package_details(filename: String) -> (String, String) {
         if filename.starts_with('@') {
             // Scoped package: "@scope/name@version" — find the '@' after the '/'
@@ -36,8 +35,6 @@ impl Versions {
         }
     }
 
-    /// Parses user-supplied "name" or "name@constraint" into `(name, version_req)`.
-    /// Returns `None` for the version_req when no version or "latest" is specified.
     pub fn parse_semantic_package_details(
         package_details: String,
     ) -> Result<(String, Option<VersionReq>), ParseError> {
@@ -55,7 +52,6 @@ impl Versions {
                     return Ok((name, Some(req)));
                 }
             }
-            // No version specified: "@scope/name"
             return Ok((package_details, None));
         }
 
@@ -71,8 +67,6 @@ impl Versions {
         }
     }
 
-    /// Parses an npm-style version string into a `VersionReq`.
-    /// Falls back to `*` (any version) for strings that can't be parsed.
     pub fn parse_semantic_version(version: &str) -> Result<VersionReq, ParseError> {
         Self::parse_npm_version_req(version).or_else(|_| Ok(VersionReq::STAR))
     }
