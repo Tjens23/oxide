@@ -109,6 +109,130 @@ fn test_dlx_parse_missing_package_errors() {
     assert!(h.parse(&mut args(&[])).is_err());
 }
 
+#[test]
+fn test_resolve_binary_string_bin_field() {
+    use crate::commands::dlx::resolve_binary;
+    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-string-bin-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), r#"{"name":"tsconfig","version":"1.0.0","bin":"dist/index.js"}"#).unwrap();
+    let result = resolve_binary(dir.to_str().unwrap(), "tsconfig", None).unwrap();
+    assert_eq!(result, format!("{}/dist/index.js", dir.to_str().unwrap()));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_resolve_binary_object_bin_field_matching_key() {
+    use crate::commands::dlx::resolve_binary;
+    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-obj-bin-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), r#"{"name":"tsconfig","version":"1.0.0","bin":{"tsconfig":"dist/index.js"}}"#).unwrap();
+    let result = resolve_binary(dir.to_str().unwrap(), "tsconfig", None).unwrap();
+    assert_eq!(result, format!("{}/dist/index.js", dir.to_str().unwrap()));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_resolve_binary_object_bin_field_binary_override() {
+    use crate::commands::dlx::resolve_binary;
+    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-bin-override-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), r#"{"name":"mypkg","version":"1.0.0","bin":{"cli":"dist/cli.js","other":"dist/other.js"}}"#).unwrap();
+    let result = resolve_binary(dir.to_str().unwrap(), "mypkg", Some("other")).unwrap();
+    assert_eq!(result, format!("{}/dist/other.js", dir.to_str().unwrap()));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_resolve_binary_no_bin_field_errors() {
+    use crate::commands::dlx::resolve_binary;
+    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-no-bin-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), r#"{"name":"mypkg","version":"1.0.0"}"#).unwrap();
+    assert!(resolve_binary(dir.to_str().unwrap(), "mypkg", None).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_js_extension_detection() {
+    for ext in &[".js", ".cjs", ".mjs"] {
+        let path = format!("dist/index{}", ext);
+        let is_js = path.ends_with(".js") || path.ends_with(".cjs") || path.ends_with(".mjs");
+        assert!(is_js, "{} should be detected as JS", path);
+    }
+}
+
+#[test]
+fn test_non_js_extension_not_detected() {
+    for path in &["dist/index", "bin/tool", "dist/index.exe", "dist/index.sh"] {
+        let is_js = path.ends_with(".js") || path.ends_with(".cjs") || path.ends_with(".mjs");
+        assert!(!is_js, "{} should NOT be detected as JS", path);
+    }
+}
+
+#[test]
+fn test_parse_shebang_env_node() {
+    use crate::commands::dlx::parse_shebang;
+    assert_eq!(parse_shebang("#!/usr/bin/env node"), Some("node".to_string()));
+}
+
+#[test]
+fn test_parse_shebang_env_bun() {
+    use crate::commands::dlx::parse_shebang;
+    assert_eq!(parse_shebang("#!/usr/bin/env bun"), Some("bun".to_string()));
+}
+
+#[test]
+fn test_parse_shebang_env_deno() {
+    use crate::commands::dlx::parse_shebang;
+    assert_eq!(parse_shebang("#!/usr/bin/env deno"), Some("deno".to_string()));
+}
+
+#[test]
+fn test_parse_shebang_absolute_path() {
+    use crate::commands::dlx::parse_shebang;
+    assert_eq!(parse_shebang("#!/usr/bin/node"), Some("node".to_string()));
+}
+
+#[test]
+fn test_parse_shebang_no_shebang() {
+    use crate::commands::dlx::parse_shebang;
+    assert_eq!(parse_shebang("console.log('hello')"), None);
+}
+
+#[test]
+fn test_parse_shebang_empty() {
+    use crate::commands::dlx::parse_shebang;
+    assert_eq!(parse_shebang(""), None);
+}
+
+#[test]
+fn test_resolve_interpreter_uses_shebang() {
+    use crate::commands::dlx::resolve_interpreter;
+    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-shebang-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("index.js");
+    std::fs::write(&script, "#!/usr/bin/env bun\nconsole.log('hi')").unwrap();
+    assert_eq!(resolve_interpreter(script.to_str().unwrap()), "bun");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_resolve_interpreter_falls_back_to_node() {
+    use crate::commands::dlx::resolve_interpreter;
+    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-noshebang-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("index.js");
+    std::fs::write(&script, "console.log('hi')").unwrap();
+    assert_eq!(resolve_interpreter(script.to_str().unwrap()), "node");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_resolve_interpreter_missing_file_falls_back_to_node() {
+    use crate::commands::dlx::resolve_interpreter;
+    assert_eq!(resolve_interpreter("/nonexistent/path/index.js"), "node");
+}
+
 
 #[test]
 fn test_why_parse() {

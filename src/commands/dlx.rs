@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    io::{BufRead, BufReader},
     process::Command,
     sync::{Arc, Mutex},
 };
@@ -94,7 +95,20 @@ impl CommandHandler for DlxHandler {
         let cwd = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
         let path_env = std::env::var("PATH").unwrap_or_default();
 
-        let status = Command::new(&bin_path)
+        let is_js = bin_path.ends_with(".js")
+            || bin_path.ends_with(".cjs")
+            || bin_path.ends_with(".mjs");
+
+        let mut cmd = if is_js {
+            let interpreter = resolve_interpreter(&bin_path);
+            let mut c = Command::new(&interpreter);
+            c.arg(&bin_path);
+            c
+        } else {
+            Command::new(&bin_path)
+        };
+
+        let status = cmd
             .args(&self.bin_args)
             .env("PATH", &path_env)
             .current_dir(&cwd)
@@ -114,7 +128,7 @@ impl CommandHandler for DlxHandler {
 }
 
 
-fn resolve_binary(
+pub fn resolve_binary(
     package_dir: &str,
     package_name: &str,
     binary_override: Option<&str>,
@@ -156,3 +170,37 @@ fn resolve_binary(
         pkg_json_path, package_name
     )))
 }
+
+pub fn resolve_interpreter(bin_path: &str) -> String {
+    if let Ok(file) = std::fs::File::open(bin_path) {
+        let mut reader = BufReader::new(file);
+        let mut first_line = String::new();
+        if reader.read_line(&mut first_line).is_ok() {
+            if let Some(interp) = parse_shebang(&first_line) {
+                return interp;
+            }
+        }
+    }
+    "node".to_string()
+}
+
+
+pub fn parse_shebang(line: &str) -> Option<String> {
+    let line = line.trim();
+    if !line.starts_with("#!") {
+        return None;
+    }
+    let rest = line[2..].trim();
+    let parts: Vec<&str> = rest.split_whitespace().collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let prog = if parts[0].ends_with("/env") || parts[0] == "env" {
+        parts.get(1).copied()?
+    } else {
+        parts[0]
+    };
+    prog.split('/').last().map(|s| s.to_string())
+}
+
+
