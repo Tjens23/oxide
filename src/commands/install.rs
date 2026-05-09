@@ -1,7 +1,5 @@
 use std::{
     collections::HashMap,
-    fs::File,
-    io::Write,
     sync::{Arc, Mutex},
 };
 
@@ -12,7 +10,7 @@ use serde_json::Value;
 use crate::{
     cache::{Cache, CACHE_DIRECTORY},
     errors::{CommandError, ParseError},
-    installer::{DependencyMapMutex, InstallContext, Installer, PackageInfo},
+    installer::{InstallContext, Installer, PackageInfo},
     util::TaskAllocator,
     versions::Versions,
     workspace,
@@ -57,43 +55,6 @@ impl InstallHandler {
         Ok(())
     }
 
-    fn write_lockfiles(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
-        let dependency_map = dependency_map_mux.lock().unwrap();
-
-        for (package_name, package_lock) in dependency_map.iter() {
-            let package_dir = format!("{}/{}/package", *CACHE_DIRECTORY, package_name);
-            std::fs::create_dir_all(&package_dir).map_err(CommandError::FailedToCreateFile)?;
-
-            let mut package_lock_file = File::create(format!("{}/oxide-lock.json", package_dir))
-            .map_err(CommandError::FailedToCreateFile)?;
-
-            let package_lock_string = serde_json::to_string(package_lock)
-                .map_err(CommandError::FailedToSerializePackageLock)?;
-
-            package_lock_file
-                .write_all(package_lock_string.as_bytes())
-                .map_err(CommandError::FailedToWriteFile)?;
-
-            let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package_name);
-            std::fs::create_dir_all(&cache_nm).map_err(CommandError::FailedToCreateFile)?;
-
-            for dep in &package_lock.dependencies {
-                let (dep_name, _) = Versions::parse_raw_package_details(dep.clone());
-                let dep_src = format!("{}/{}/package", *CACHE_DIRECTORY, dep);
-                let dep_dest = format!("{}/{}", cache_nm, dep_name);
-                if let Some(parent) = std::path::Path::new(&dep_dest).parent() {
-                    std::fs::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;
-                }
-                match crate::util::create_dir_link(&dep_src, &dep_dest) {
-                    Ok(_) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                    Err(e) => return Err(CommandError::FailedToCreateFile(e)),
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -229,7 +190,7 @@ impl InstallHandler {
         // Blocks the main thread however it's not going to have a huge performance impact on tokio
         TaskAllocator::block_until_done();
 
-        Self::write_lockfiles(dependency_map_mux)?;
+        Installer::write_lockfiles(dependency_map_mux)?;
         Cache::load_cached_version(stringified);
         Self::update_package_json(&resolved_name, &resolved_version)?;
 
