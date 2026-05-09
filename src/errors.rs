@@ -43,7 +43,7 @@ pub enum CommandError {
     LoginTimedOut,
     #[error("failed to read file ({0})")]
     FailedToReadFile(Error),
-    #[error("git command failed: {0}")]
+    #[error("{0}")]
     GitFailed(String),
     #[error("Failed to validate package integrity")]
     IntegrityCheckFailed,

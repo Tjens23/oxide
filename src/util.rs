@@ -50,6 +50,40 @@ pub fn extract_tarball(bytes: Bytes, dest: String) -> Result<(), CommandError> {
         .map_err(CommandError::ExtractionFailed)
 }
 
+pub fn extract_tarball_strip(bytes: Bytes, dest: &str) -> Result<(), CommandError> {
+    use std::path::PathBuf;
+
+    let bytes_slice = bytes.as_ref();
+    let gz = GzDecoder::new(bytes_slice);
+    let mut archive = Archive::new(gz);
+
+    for entry in archive.entries().map_err(CommandError::ExtractionFailed)? {
+        let mut entry = entry.map_err(CommandError::ExtractionFailed)?;
+        let path = entry
+            .path()
+            .map_err(CommandError::ExtractionFailed)?
+            .into_owned();
+
+        // Drop the leading "package" component
+        let stripped: PathBuf = path.components().skip(1).collect();
+        if stripped.as_os_str().is_empty() {
+            continue;
+        }
+
+        let out = std::path::Path::new(dest).join(&stripped);
+        if entry.header().entry_type().is_dir() {
+            std::fs::create_dir_all(&out).map_err(CommandError::ExtractionFailed)?;
+        } else {
+            if let Some(parent) = out.parent() {
+                std::fs::create_dir_all(parent).map_err(CommandError::ExtractionFailed)?;
+            }
+            entry.unpack(&out).map_err(CommandError::ExtractionFailed)?;
+        }
+    }
+
+    Ok(())
+}
+
 pub static ACTIVE_TASKS: AtomicUsize = AtomicUsize::new(0);
 
 pub struct TaskAllocator;
