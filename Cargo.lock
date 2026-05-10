@@ -1441,7 +1441,6 @@ dependencies = [
 [[package]]
 name = "oxide"
 version = "0.9.7"
-
 dependencies = [
  "apple-native-keyring-store",
  "async-trait",

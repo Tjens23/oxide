@@ -21,7 +21,7 @@ pub fn verify_integrity(bytes: &Bytes, integrity: &str) -> bool {
 }
 
 pub fn verify_shasum(bytes: &Bytes, expected_hex: &str) -> bool {
-    use sha1::Digest as _;
+    use sha1::Digest;
     let digest = sha1::Sha1::digest(bytes);
     let hex: String = digest.iter().map(|b| format!("{:02x}", b)).collect();
     hex == expected_hex
