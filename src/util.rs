@@ -1,11 +1,9 @@
 use std::{
     future::Future,
-    sync::atomic::{self, AtomicUsize},
+    sync::atomic::{AtomicUsize, Ordering},
     thread::{self},
     time::Duration,
 };
-
-use atomic::Ordering::SeqCst;
 use bytes::Bytes;
 use flate2::bufread::GzDecoder;
 use tar::Archive;
@@ -23,7 +21,7 @@ pub fn verify_integrity(bytes: &Bytes, integrity: &str) -> bool {
 }
 
 pub fn verify_shasum(bytes: &Bytes, expected_hex: &str) -> bool {
-    use sha1::Digest as _;
+    use sha1::Digest;
     let digest = sha1::Sha1::digest(bytes);
     let hex: String = digest.iter().map(|b| format!("{:02x}", b)).collect();
     hex == expected_hex
@@ -124,14 +122,14 @@ impl TaskAllocator {
     }
 
     fn increment_tasks() {
-        ACTIVE_TASKS.fetch_add(1, SeqCst);
+        ACTIVE_TASKS.fetch_add(1, Ordering::SeqCst);
     }
 
     fn decrement_tasks() {
-        ACTIVE_TASKS.fetch_sub(1, SeqCst);
+        ACTIVE_TASKS.fetch_sub(1, Ordering::SeqCst);
     }
 
     fn task_count() -> usize {
-        ACTIVE_TASKS.load(SeqCst)
+        ACTIVE_TASKS.load(Ordering::SeqCst)
     }
 }

@@ -35,6 +35,13 @@ impl Versions {
         }
     }
 
+    fn validate_package_name(name: &str) -> Result<(), ParseError> {
+        if name.contains("..") || name.contains('\\') || std::path::Path::new(name).is_absolute() {
+            return Err(ParseError::InvalidPackageName(name.to_string()));
+        }
+        Ok(())
+    }
+
     pub fn parse_semantic_package_details(
         package_details: String,
     ) -> Result<(String, Option<VersionReq>), ParseError> {
@@ -44,6 +51,7 @@ impl Versions {
                 let after_slash = &package_details[slash_pos + 1..];
                 if let Some(at_pos) = after_slash.find('@') {
                     let name = package_details[..slash_pos + 1 + at_pos].to_string();
+                    Self::validate_package_name(&name)?;
                     let version_str = &after_slash[at_pos + 1..];
                     if version_str == LATEST {
                         return Ok((name, None));
@@ -52,12 +60,17 @@ impl Versions {
                     return Ok((name, Some(req)));
                 }
             }
+            Self::validate_package_name(&package_details)?;
             return Ok((package_details, None));
         }
 
         match package_details.split_once('@') {
-            None => Ok((package_details, None)),
+            None => {
+                Self::validate_package_name(&package_details)?;
+                Ok((package_details, None))
+            }
             Some((name, version_str)) => {
+                Self::validate_package_name(name)?;
                 if version_str == LATEST {
                     return Ok((name.to_string(), None));
                 }
