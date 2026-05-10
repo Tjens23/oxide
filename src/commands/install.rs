@@ -190,7 +190,8 @@ impl InstallHandler {
         // Blocks the main thread however it's not going to have a huge performance impact on tokio
         TaskAllocator::block_until_done();
 
-        Installer::write_lockfiles(dependency_map_mux)?;
+        Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
+        Installer::write_project_lockfile(dependency_map_mux)?;
         Cache::load_cached_version(stringified);
         Self::update_package_json(&resolved_name, &resolved_version)?;
 

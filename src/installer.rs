@@ -222,7 +222,7 @@ impl Installer {
         fs::create_dir("./node_modules").expect("Failed to create node modules folder");
     }
 
-    pub fn write_lockfiles(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
+    pub fn setup_cache_packages(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
         let dependency_map = dependency_map_mux.lock().unwrap();
 
         for (package_name, package_lock) in dependency_map.iter() {
@@ -296,6 +296,29 @@ impl Installer {
                 }
             }
         }
+
+        Ok(())
+    }
+
+    pub fn write_project_lockfile(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
+        let new_entries = dependency_map_mux.lock().unwrap();
+
+        let mut merged: DependencyMap = fs::read_to_string("./oxide-lock.json")
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default();
+
+        for (k, v) in new_entries.iter() {
+            merged.insert(k.clone(), PackageLock {
+                is_latest: v.is_latest,
+                dependencies: v.dependencies.clone(),
+            });
+        }
+
+        let serialized = serde_json::to_string_pretty(&merged)
+            .map_err(CommandError::FailedToSerializePackageLock)?;
+
+        fs::write("./oxide-lock.json", serialized).map_err(CommandError::FailedToWriteFile)?;
 
         Ok(())
     }

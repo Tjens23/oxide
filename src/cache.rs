@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{self as fs_sync, File},
-    io::{Read, Seek, SeekFrom},
+    fs::{self as fs_sync},
     str::FromStr,
 };
 
@@ -67,23 +66,13 @@ impl Cache {
                 *CACHE_DIRECTORY, full_entry
             );
 
-            let mut lock_file = match File::open(&lock_path) {
-                Ok(f) => f,
-                Err(_) => continue, // Skip entries without a lockfile (e.g. mid-extraction)
+            let is_latest = match fs_sync::read_to_string(&lock_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<PackageLock>(&raw).ok())
+            {
+                Some(lf) => lf.is_latest,
+                None => continue,
             };
-
-            // This is not an ideal method but it beats parsing the JSON of every installed package
-            let start_byte = 12;
-            let end_byte = 15;
-
-            let bytes_length = end_byte - start_byte + 1;
-            let mut buf = vec![0; bytes_length];
-
-            lock_file.seek(SeekFrom::Start(start_byte as u64)).unwrap();
-            lock_file.read_exact(&mut buf).unwrap();
-
-            let is_latest_str = String::from_utf8(buf).unwrap();
-            let is_latest = is_latest_str == "true";
 
             let (name, version) = Versions::parse_raw_package_details(full_entry);
             cached_versions.insert(name, CachedVersion { version, is_latest });
