@@ -9,6 +9,8 @@ pub enum ParseError {
     MissingArgument(String),
     #[error("invalid version notation ({0})")]
     InvalidVersionNotation(semver::Error),
+    #[error("invalid package name: '{0}'")]
+    InvalidPackageName(String),
 }
 
 #[derive(Error, Debug)]
