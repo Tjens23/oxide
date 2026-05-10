@@ -1,11 +1,9 @@
 use std::{
     future::Future,
-    sync::atomic::{self, AtomicUsize},
+    sync::atomic::{AtomicUsize, Ordering},
     thread::{self},
     time::Duration,
 };
-
-use atomic::Ordering::SeqCst;
 use bytes::Bytes;
 use flate2::bufread::GzDecoder;
 use tar::Archive;
@@ -124,14 +122,14 @@ impl TaskAllocator {
     }
 
     fn increment_tasks() {
-        ACTIVE_TASKS.fetch_add(1, SeqCst);
+        ACTIVE_TASKS.fetch_add(1, Ordering::SeqCst);
     }
 
     fn decrement_tasks() {
-        ACTIVE_TASKS.fetch_sub(1, SeqCst);
+        ACTIVE_TASKS.fetch_sub(1, Ordering::SeqCst);
     }
 
     fn task_count() -> usize {
-        ACTIVE_TASKS.load(SeqCst)
+        ACTIVE_TASKS.load(Ordering::SeqCst)
     }
 }
