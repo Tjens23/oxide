@@ -64,6 +64,12 @@ impl CommandHandler for DlxHandler {
         .await?;
 
         let resolved_version = version_data.version.clone();
+        if !crate::util::is_safe_path_component(&resolved_version) {
+            return Err(CommandError::GitFailed(format!(
+                "unsafe version string received from registry: {}",
+                resolved_version
+            )));
+        }
 
         // Isolated dir layout:
         //   {CACHE}/dlx/{name}@{version}/

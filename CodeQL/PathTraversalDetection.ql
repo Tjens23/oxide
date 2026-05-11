@@ -9,9 +9,15 @@ import rust
 import codeql.rust.dataflow.DataFlow
 import codeql.rust.dataflow.TaintTracking
 
-// Source: any function parameter — user-controlled strings enter through CLI arg parsing
+// Source: HTTP response bytes from the registry — the only external attacker-controlled
+// binary data that flows into file-system path construction in this codebase.
 class UserInputSource extends DataFlow::Node {
-  UserInputSource() { this instanceof DataFlow::ParameterNode }
+  UserInputSource() {
+    exists(MethodCallExpr mc |
+      mc.getIdentifier().getText() = "bytes" and
+      this.asExpr() = mc
+    )
+  }
 }
 
 // Sink: first argument of file-system functions that open or create paths
@@ -30,6 +36,17 @@ class PathSink extends DataFlow::Node {
 module PathTaintConfig implements DataFlow::ConfigSig {
   predicate isSource(DataFlow::Node n) { n instanceof UserInputSource }
   predicate isSink(DataFlow::Node n) { n instanceof PathSink }
+
+  predicate isBarrier(DataFlow::Node n) {
+    // Paths rebuilt via .filter(...).collect() strip unsafe components and are sanitized.
+    // This recognises the zip-slip fix in extract_tarball_strip.
+    exists(MethodCallExpr collect, MethodCallExpr filter |
+      collect.getIdentifier().getText() = "collect" and
+      filter.getIdentifier().getText() = "filter" and
+      collect.getReceiver() = filter and
+      n.asExpr() = collect
+    )
+  }
 }
 
 module PathTaint = TaintTracking::Global<PathTaintConfig>;

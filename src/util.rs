@@ -38,6 +38,24 @@ pub fn create_dir_link(src: &str, dest: &str) -> std::io::Result<()> {
     }
 }
 
+/// Returns `true` if `s` is safe to use as a component in a cache or
+/// `node_modules` path.  Rejects traversal sequences (`..`), absolute
+/// paths, Windows drive prefixes, and null bytes.
+pub fn is_safe_path_component(s: &str) -> bool {
+    if s.is_empty() || s.contains('\0') {
+        return false;
+    }
+    for component in std::path::Path::new(s).components() {
+        match component {
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
 pub fn extract_tarball(bytes: Bytes, dest: String) -> Result<(), CommandError> {
     let bytes = &bytes.to_vec()[..];
     let gz = GzDecoder::new(bytes);
@@ -62,13 +80,18 @@ pub fn extract_tarball_strip(bytes: Bytes, dest: &str) -> Result<(), CommandErro
             .map_err(CommandError::ExtractionFailed)?
             .into_owned();
 
-        // Drop the leading "package" component
-        let stripped: PathBuf = path.components().skip(1).collect();
-        if stripped.as_os_str().is_empty() {
+        // Drop the leading "package" component and reject any non-normal path
+        // components to prevent zip-slip attacks (e.g. `../../etc/passwd`).
+        let safe_stripped: PathBuf = path
+            .components()
+            .skip(1)
+            .filter(|c| matches!(c, std::path::Component::Normal(_)))
+            .collect();
+        if safe_stripped.as_os_str().is_empty() {
             continue;
         }
 
-        let out = std::path::Path::new(dest).join(&stripped);
+        let out = std::path::Path::new(dest).join(&safe_stripped);
         if entry.header().entry_type().is_dir() {
             std::fs::create_dir_all(&out).map_err(CommandError::ExtractionFailed)?;
         } else {

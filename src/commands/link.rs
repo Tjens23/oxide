@@ -40,6 +40,11 @@ fn create_link(src: &Path, dest: &Path) -> Result<(), CommandError> {
 fn link_current_to_global() -> Result<(), CommandError> {
     let cwd = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
     let name = read_package_name(&cwd)?;
+    if !crate::util::is_safe_path_component(&name) {
+        return Err(CommandError::FailedToWriteFile(std::io::Error::other(
+            "package name contains unsafe path characters",
+        )));
+    };
 
     let global_nm = global_node_modules().ok_or_else(|| {
         CommandError::FailedToWriteFile(std::io::Error::other(
@@ -58,6 +63,11 @@ fn link_current_to_global() -> Result<(), CommandError> {
 fn link_dir_to_local(dir: &Path) -> Result<(), CommandError> {
     let abs = std::fs::canonicalize(dir).map_err(CommandError::FailedToWriteFile)?;
     let name = read_package_name(&abs)?;
+    if !crate::util::is_safe_path_component(&name) {
+        return Err(CommandError::FailedToWriteFile(std::io::Error::other(
+            "package name contains unsafe path characters",
+        )));
+    }
 
     std::fs::create_dir_all("./node_modules").map_err(CommandError::FailedToWriteFile)?;
     let dest = Path::new("./node_modules").join(&name);

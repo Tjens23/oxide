@@ -136,6 +136,12 @@ impl InstallHandler {
 
         if is_cached {
             let version = cached_version.expect("Could not resolve version of cached package");
+            if !crate::util::is_safe_path_component(&version) {
+                return Err(CommandError::GitFailed(format!(
+                    "unsafe version string in cache: {}",
+                    version
+                )));
+            }
             let stringified = Versions::stringify(&self.package_name, &version);
             let lockfile_path = format!(
                 "{}/{}/package/oxide-lock.json",
@@ -174,6 +180,13 @@ impl InstallHandler {
         let stringified = Versions::stringify(&version_data.name, &version_data.version);
         let resolved_name = version_data.name.clone();
         let resolved_version = version_data.version.clone();
+
+        if !crate::util::is_safe_path_component(&stringified) {
+            return Err(CommandError::GitFailed(format!(
+                "unsafe package identifier received from registry: {}",
+                stringified
+            )));
+        }
 
         let package_info = PackageInfo {
             version_data,
