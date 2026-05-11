@@ -61,6 +61,9 @@ fn extract_patterns(json: &Value) -> Vec<String> {
 
 fn expand_glob(root: &Path, pattern: &str) -> Vec<PathBuf> {
     if let Some(prefix) = pattern.strip_suffix("/*") {
+        if !crate::util::is_safe_path_component(prefix) {
+            return Vec::new();
+        }
         let dir = root.join(prefix);
         return std::fs::read_dir(&dir)
             .into_iter()
@@ -74,6 +77,9 @@ fn expand_glob(root: &Path, pattern: &str) -> Vec<PathBuf> {
             .collect();
     }
     if !pattern.contains('*') {
+        if !crate::util::is_safe_path_component(pattern) {
+            return Vec::new();
+        }
         let path = root.join(pattern);
         if path.is_dir() && path.join("package.json").exists() {
             return vec![path];

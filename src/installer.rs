@@ -130,9 +130,15 @@ impl Installer {
 
             if !already_extracted {
                 let package_bytes =
-                    HTTPRequest::get_bytes(context.client.clone(), version_data.dist.tarball.clone())
+                    match HTTPRequest::get_bytes(context.client.clone(), version_data.dist.tarball.clone())
                         .await
-                        .unwrap();
+                    {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            eprintln!("Failed to download '{}': {}", stringified, e);
+                            return;
+                        }
+                    };
                 if !version_data.dist.verify(&package_bytes) {
                     eprintln!("'{}': {}", stringified, CommandError::IntegrityCheckFailed);
                     return;
@@ -170,9 +176,15 @@ impl Installer {
             let full_version = Versions::resolve_full_version(req);
             let full_version = full_version.as_ref();
 
-            let (is_cached, cached_version) = Cache::exists(&name, full_version, req)
+            let (is_cached, cached_version) = match Cache::exists(&name, full_version, req)
                 .await
-                .unwrap();
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Warning: failed to check cache for '{}': {}", name, e);
+                    continue;
+                }
+            };
 
             if is_cached {
                 let version = cached_version.expect("Could not resolve version of cached package");
@@ -198,9 +210,15 @@ impl Installer {
             }
 
             let version_data =
-                Self::get_version_data(context.client.clone(), &name, full_version, req)
+                match Self::get_version_data(context.client.clone(), &name, full_version, req)
                     .await
-                    .unwrap();
+                {
+                    Ok(data) => data,
+                    Err(e) => {
+                        eprintln!("Warning: failed to fetch version data for '{}': {}", name, e);
+                        continue;
+                    }
+                };
 
             let stringified = Versions::stringify(&name, &version_data.version);
 

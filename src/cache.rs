@@ -61,6 +61,9 @@ impl Cache {
         }
 
         for full_entry in all_entries {
+            if !crate::util::is_safe_path_component(&full_entry) {
+                continue;
+            }
             let lock_path = format!(
                 "{}/{}/package/oxide-lock.json",
                 *CACHE_DIRECTORY, full_entry
@@ -175,6 +178,9 @@ impl Cache {
     }
 
     pub fn load_cached_version(package: String) {
+        if !crate::util::is_safe_path_component(&package) {
+            panic!("unsafe package path component: {}", package);
+        }
         let lockfile_path = format!(
             "{}/{}/package/oxide-lock.json",
             *CACHE_DIRECTORY, package
@@ -194,6 +200,9 @@ impl Cache {
         let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package);
         fs_sync::create_dir_all(&cache_nm).expect("Failed to create cache node_modules");
         for dep in &dependencies {
+            if !crate::util::is_safe_path_component(dep) {
+                continue;
+            }
             let (dep_name, _) = Versions::parse_raw_package_details(dep.clone());
             let dep_src = format!("{}/{}/package", *CACHE_DIRECTORY, dep);
             let dep_dest = format!("{}/{}", cache_nm, dep_name);
@@ -212,6 +221,9 @@ impl Cache {
         all_links.push(package.clone());
 
         for entry in all_links {
+            if !crate::util::is_safe_path_component(&entry) {
+                continue;
+            }
             let (package_name, _) = Versions::parse_raw_package_details(entry.to_string());
 
             let src = format!("{}/{}/package", *CACHE_DIRECTORY, entry);

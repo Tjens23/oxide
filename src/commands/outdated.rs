@@ -96,6 +96,9 @@ impl CommandHandler for OutdatedHandler {
 }
 
 fn read_installed_version(package_name: &str) -> Option<String> {
+    if !crate::util::is_safe_path_component(package_name) {
+        return None;
+    }
     let path = format!("./node_modules/{}/package.json", package_name);
     let content = std::fs::read_to_string(path).ok()?;
     let json: Value = serde_json::from_str(&content).ok()?;

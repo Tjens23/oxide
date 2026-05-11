@@ -47,6 +47,6 @@ pub enum CommandError {
     FailedToReadFile(Error),
     #[error("{0}")]
     GitFailed(String),
-    #[error("Failed to validate package integrity")]
+    #[error("failed to validate package integrity")]
     IntegrityCheckFailed,
 }
