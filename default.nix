@@ -4,16 +4,16 @@ in
 
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "oxide";
-  version = "0.8.1";
+  version = "0.9.7";
 
   src = pkgs.fetchFromGitHub {
     owner = "Tjens23";
     repo = pname;
     rev = "v${version}";
-    hash = "sha256-RQkgGJwyO+qel/17An1I8ggf458Zg62MnQW9iTlCwX8=";
+    hash = "sha256-rT+l1L5HyK0QgmQdYgcNDyPQzASFWqEAu1jSPS8NS64=";
   };
 
-  cargoHash = "sha256-M9v7Mr+8RAIKcwTSLRJQEwDCa7Y5toJ8OisaU1/lQ38=";
+  cargoHash = "sha256-ibZDkKUAiH4//fEVc8k42R+0ZW4aj4lEqaAEg78JrJo=";
 
   meta = with pkgs.lib; {
     description = "npm package manager written in rust";
