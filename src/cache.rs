@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{self as fs_sync, File},
-    io::{Read, Seek, SeekFrom},
+    fs::{self as fs_sync},
     str::FromStr,
 };
 
@@ -36,8 +35,6 @@ lazy_static! {
 
 pub struct Cache;
 impl Cache {
-    /// Returns a hashmap, each key is formatted as package@version
-    /// and the value is a boolean of whether the package is the latest version or not.
     pub fn get_cached_versions() -> CachedVersions {
         fs_sync::create_dir_all(CACHE_DIRECTORY.to_string())
             .expect("Failed to create cache directory");
@@ -51,7 +48,6 @@ impl Cache {
         for entry in dir_contents.flatten() {
             let filename = entry.file_name().to_string_lossy().to_string();
             if filename.starts_with('@') {
-                // Scope directory (e.g. "@discordjs") — recurse into it
                 let scope_dir = format!("{}/{}", *CACHE_DIRECTORY, filename);
                 if let Ok(scope_contents) = fs_sync::read_dir(&scope_dir) {
                     for scope_entry in scope_contents.flatten() {
@@ -65,28 +61,21 @@ impl Cache {
         }
 
         for full_entry in all_entries {
+            if !crate::util::is_safe_path_component(&full_entry) {
+                continue;
+            }
             let lock_path = format!(
                 "{}/{}/package/oxide-lock.json",
                 *CACHE_DIRECTORY, full_entry
             );
 
-            let mut lock_file = match File::open(&lock_path) {
-                Ok(f) => f,
-                Err(_) => continue, // Skip entries without a lockfile (e.g. mid-extraction)
+            let is_latest = match fs_sync::read_to_string(&lock_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<PackageLock>(&raw).ok())
+            {
+                Some(lf) => lf.is_latest,
+                None => continue,
             };
-
-            // This is not an ideal method but it beats parsing the JSON of every installed package
-            let start_byte = 12;
-            let end_byte = 15;
-
-            let bytes_length = end_byte - start_byte + 1;
-            let mut buf = vec![0; bytes_length];
-
-            lock_file.seek(SeekFrom::Start(start_byte as u64)).unwrap();
-            lock_file.read_exact(&mut buf).unwrap();
-
-            let is_latest_str = String::from_utf8(buf).unwrap();
-            let is_latest = is_latest_str == "true";
 
             let (name, version) = Versions::parse_raw_package_details(full_entry);
             cached_versions.insert(name, CachedVersion { version, is_latest });
@@ -95,8 +84,6 @@ impl Cache {
         cached_versions
     }
 
-    /// Checks if a package with a valid version matching with `semantic_version` is already in the cache
-    /// and returns `true` if so, `false` if otherwise, as well as the resolved version if it exists
     pub async fn exists(
         package_name: &String,
         version: Option<&String>,
@@ -116,7 +103,6 @@ impl Cache {
 
         let semantic_version = semantic_version.unwrap();
 
-        // Scoped packages (e.g. "@scope/name") are stored under a scope subdirectory.
         if package_name.starts_with('@') {
             if let Some(slash_pos) = package_name.find('/') {
                 let scope = &package_name[..slash_pos];
@@ -183,8 +169,6 @@ impl Cache {
         }
     }
 
-    /// Checks if the latest version exists in the cache.
-    /// This is checked by reading if the package lock has the latest property as true.
     pub fn get_latest_version_in_cache(package_name: &String) -> Option<String> {
         let cached_version = CACHED_VERSIONS.get(package_name);
         match cached_version {
@@ -193,8 +177,10 @@ impl Cache {
         }
     }
 
-    /// Package string is formated as package@version
     pub fn load_cached_version(package: String) {
+        if !crate::util::is_safe_path_component(&package) {
+            panic!("unsafe package path component: {}", package);
+        }
         let lockfile_path = format!(
             "{}/{}/package/oxide-lock.json",
             *CACHE_DIRECTORY, package
@@ -214,6 +200,9 @@ impl Cache {
         let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package);
         fs_sync::create_dir_all(&cache_nm).expect("Failed to create cache node_modules");
         for dep in &dependencies {
+            if !crate::util::is_safe_path_component(dep) {
+                continue;
+            }
             let (dep_name, _) = Versions::parse_raw_package_details(dep.clone());
             let dep_src = format!("{}/{}/package", *CACHE_DIRECTORY, dep);
             let dep_dest = format!("{}/{}", cache_nm, dep_name);
@@ -232,6 +221,9 @@ impl Cache {
         all_links.push(package.clone());
 
         for entry in all_links {
+            if !crate::util::is_safe_path_component(&entry) {
+                continue;
+            }
             let (package_name, _) = Versions::parse_raw_package_details(entry.to_string());
 
             let src = format!("{}/{}/package", *CACHE_DIRECTORY, entry);

@@ -17,10 +17,18 @@ use super::uninstall::UninstallHandler;
 use super::unlink::UnlinkHandler;
 use super::upgrade::UpgradeHandler;
 use super::version::VersionHandler;
+use super::outdated::OutdatedHandler;
+use super::why::WhyHandler;
+use super::ls::LsHandler;
+use super::pack::PackHandler;
+use super::doctor::DoctorHandler;
+use super::dlx::DlxHandler;
+use super::workspaces::WorkspacesHandler;
+use super::foreach::ForeachHandler;
 
 #[async_trait]
 pub trait CommandHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError>;
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError>;
     async fn execute(&self) -> Result<(), CommandError>;
 }
 
@@ -38,9 +46,19 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
                 ("exec", "Execute a binary from node_modules/.bin"),
                 ("run", "Run a defined package script"),
                 ("version", "Bump package.json version, commit, and create a git tag"),
-                ("init", "Initialize a new project with a package.json"),                ("link", "Link a package globally or into node_modules"),
-                ("unlink", "Remove a linked package"),                ("publish", "Publish a package to the npm registry"),
+                ("init", "Initialize a new project with a package.json"),                
+                ("link", "Link a package globally or into node_modules"),
+                ("unlink", "Remove a linked package"),                
+                ("publish", "Publish a package to the npm registry"),
                 ("login", "Authenticate with the npm registry to allow installing private packages"),
+                ("outdated", "List dependencies with available updates"),
+                ("why", "Explain why a package is installed"),
+                ("ls", "List installed packages"),
+                ("pack", "Create a publishable .tgz tarball locally"),
+                ("doctor", "Check project health and environment"),
+                ("dlx", "Fetch and run a package binary without installing it"),
+                ("workspaces", "List workspace packages defined in this monorepo"),
+                ("foreach", "Run a script across workspace packages"),
             ] {
                 println!("  {:<12} {}", name, description);
             }
@@ -61,6 +79,14 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "exec" | "x" => Box::new(ExecHandler::default()),
         "run" => Box::new(RunHandler::default()),
         "version" => Box::new(VersionHandler::default()),
+        "outdated" => Box::new(OutdatedHandler::default()),
+        "why" => Box::new(WhyHandler::default()),
+        "ls" | "list" => Box::new(LsHandler::default()),
+        "pack" => Box::new(PackHandler::default()),
+        "doctor" | "check" => Box::new(DoctorHandler::default()),
+        "dlx" | "bunx" => Box::new(DlxHandler::default()),
+        "workspaces" | "ws" => Box::new(WorkspacesHandler::default()),
+        "foreach" | "each" => Box::new(ForeachHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
 

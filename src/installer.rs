@@ -1,5 +1,6 @@
 use semver::VersionReq;
-use std::fs::{self};
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::Path;
 use std::{
     collections::HashMap,
@@ -31,7 +32,6 @@ pub struct InstallContext {
 
 pub struct Installer;
 impl Installer {
-    /// Gets the version data taking in the full version rather than resolving it on its own.
     pub async fn get_version_data(
         client: reqwest::Client,
         package_name: &String,
@@ -52,10 +52,6 @@ impl Installer {
             .expect("Failed to find resolved package version in package data"))
     }
 
-    // NOTE(conaticus): To save storage space, it might be an idea to check if the semantic version matches,
-    // rather than installing an whole new version, however this is an uncommon case due to how we handle version resolution so it's not a big deal.
-    /// Returns true if a given dependency's version has been/will be installed to avoid unneccesary duplicate installs
-    /// If the dependency is not in the hashmap, it will be added to the hashmap for further checks.
     fn already_resolved(context: &InstallContext, package_info: &PackageInfo) -> bool {
         let mut dependency_map = context.dependency_map_mux.lock().unwrap();
         let stringified_version = Versions::stringify(
@@ -77,7 +73,6 @@ impl Installer {
         }
     }
 
-    /// Append a version to a specific parent version, this hashmap will be used to generate package lock files.
     fn append_version(
         parents_mux: Arc<Mutex<Vec<String>>>,
         new_version_name: String,
@@ -105,7 +100,6 @@ impl Installer {
         parents_mux: Arc<Mutex<Vec<String>>>,
     ) -> Result<(), CommandError> {
         if Self::already_resolved(&context, &package_info) {
-            // Still record as a dep of the current parents even if already being installed
             Self::append_version(
                 Arc::clone(&parents_mux),
                 package_info.stringified.to_string(),
@@ -136,10 +130,19 @@ impl Installer {
 
             if !already_extracted {
                 let package_bytes =
-                    HTTPRequest::get_bytes(context.client.clone(), version_data.dist.tarball)
+                    match HTTPRequest::get_bytes(context.client.clone(), version_data.dist.tarball.clone())
                         .await
-                        .unwrap();
-
+                    {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            eprintln!("Failed to download '{}': {}", stringified, e);
+                            return;
+                        }
+                    };
+                if !version_data.dist.verify(&package_bytes) {
+                    eprintln!("'{}': {}", stringified, CommandError::IntegrityCheckFailed);
+                    return;
+                }
                 let dest = package_destination.clone();
                 let strf = stringified.clone();
                 TaskAllocator::add_blocking(move || {
@@ -173,15 +176,20 @@ impl Installer {
             let full_version = Versions::resolve_full_version(req);
             let full_version = full_version.as_ref();
 
-            let (is_cached, cached_version) = Cache::exists(&name, full_version, req)
+            let (is_cached, cached_version) = match Cache::exists(&name, full_version, req)
                 .await
-                .unwrap();
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Warning: failed to check cache for '{}': {}", name, e);
+                    continue;
+                }
+            };
 
             if is_cached {
                 let version = cached_version.expect("Could not resolve version of cached package");
                 let stringified = Versions::stringify(&name, &version);
 
-                // Always record this dep in the parent's lockfile entry.
                 Self::append_version(
                     Arc::clone(&parents_mux),
                     stringified.clone(),
@@ -202,9 +210,15 @@ impl Installer {
             }
 
             let version_data =
-                Self::get_version_data(context.client.clone(), &name, full_version, req)
+                match Self::get_version_data(context.client.clone(), &name, full_version, req)
                     .await
-                    .unwrap();
+                {
+                    Ok(data) => data,
+                    Err(e) => {
+                        eprintln!("Warning: failed to fetch version data for '{}': {}", name, e);
+                        continue;
+                    }
+                };
 
             let stringified = Versions::stringify(&name, &version_data.version);
 
@@ -218,12 +232,112 @@ impl Installer {
         }
     }
 
-    /// Creates the node modules folder if it is not present.
     pub fn create_modules_dir() {
         if Path::new("./node_modules").exists() {
             return;
         }
 
         fs::create_dir("./node_modules").expect("Failed to create node modules folder");
+    }
+
+    pub fn setup_cache_packages(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
+        let dependency_map = dependency_map_mux.lock().unwrap();
+
+        for (package_name, package_lock) in dependency_map.iter() {
+            let package_dir = format!("{}/{}/package", *CACHE_DIRECTORY, package_name);
+            fs::create_dir_all(&package_dir).map_err(CommandError::FailedToCreateFile)?;
+
+            let mut package_lock_file = File::create(format!("{}/oxide-lock.json", package_dir))
+                .map_err(CommandError::FailedToCreateFile)?;
+
+            let package_lock_string = serde_json::to_string(package_lock)
+                .map_err(CommandError::FailedToSerializePackageLock)?;
+
+            package_lock_file
+                .write_all(package_lock_string.as_bytes())
+                .map_err(CommandError::FailedToWriteFile)?;
+        }
+
+
+        let mut all_packages: Vec<(String, Vec<String>)> = dependency_map
+            .iter()
+            .map(|(k, v)| (k.clone(), v.dependencies.clone()))
+            .collect();
+
+        let mut visited: std::collections::HashSet<String> =
+            dependency_map.keys().cloned().collect();
+
+        let mut queue: Vec<String> = dependency_map
+            .values()
+            .flat_map(|v| v.dependencies.iter().cloned())
+            .filter(|d| !visited.contains(d.as_str()))
+            .collect();
+
+        while let Some(pkg) = queue.pop() {
+            if visited.contains(&pkg) {
+                continue;
+            }
+            visited.insert(pkg.clone());
+
+            let lockfile_path =
+                format!("{}/{}/package/oxide-lock.json", *CACHE_DIRECTORY, pkg);
+            let deps: Vec<String> = match fs::read_to_string(&lockfile_path) {
+                Ok(raw) => serde_json::from_str::<crate::types::PackageLock>(&raw)
+                    .map(|lf| lf.dependencies)
+                    .unwrap_or_default(),
+                Err(_) => vec![],
+            };
+
+            for dep in &deps {
+                if !visited.contains(dep.as_str()) {
+                    queue.push(dep.clone());
+                }
+            }
+            all_packages.push((pkg, deps));
+        }
+
+        for (package_name, deps) in all_packages {
+            let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package_name);
+            fs::create_dir_all(&cache_nm).map_err(CommandError::FailedToCreateFile)?;
+
+            for dep in &deps {
+                let (dep_name, _) = Versions::parse_raw_package_details(dep.clone());
+                let dep_src = format!("{}/{}/package", *CACHE_DIRECTORY, dep);
+                let dep_dest = format!("{}/{}", cache_nm, dep_name);
+                if let Some(parent) = std::path::Path::new(&dep_dest).parent() {
+                    fs::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;
+                }
+                match util::create_dir_link(&dep_src, &dep_dest) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(e) => return Err(CommandError::FailedToCreateFile(e)),
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn write_project_lockfile(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
+        let new_entries = dependency_map_mux.lock().unwrap();
+
+        let mut merged: DependencyMap = fs::read_to_string("./oxide-lock.json")
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default();
+
+        for (k, v) in new_entries.iter() {
+            merged.insert(k.clone(), PackageLock {
+                is_latest: v.is_latest,
+                dependencies: v.dependencies.clone(),
+            });
+        }
+
+        let serialized = serde_json::to_string_pretty(&merged)
+            .map_err(CommandError::FailedToSerializePackageLock)?;
+
+        fs::write("./oxide-lock.json", serialized).map_err(CommandError::FailedToWriteFile)?;
+
+        Ok(())
     }
 }

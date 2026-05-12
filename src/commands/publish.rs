@@ -1,7 +1,4 @@
-use std::{
-    env::Args,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -31,7 +28,7 @@ const ALWAYS_IGNORE: &[&str] = &[
     "CVS",
 ];
 
-fn read_ignore_patterns(dir: &Path) -> Vec<String> {
+pub(crate) fn read_ignore_patterns(dir: &Path) -> Vec<String> {
     let npmignore = dir.join(".npmignore");
     let gitignore = dir.join(".gitignore");
 
@@ -45,14 +42,13 @@ fn read_ignore_patterns(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
+pub(crate) fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
     let first = rel.split(['/', '\\']).next().unwrap_or("");
 
     if ALWAYS_IGNORE.iter().any(|p| first == *p) {
         return true;
     }
 
-    // User patterns: simple prefix / exact match.
     for pattern in user_patterns {
         let p = pattern.trim_start_matches('/');
         if rel == p || rel.starts_with(&format!("{}/", p)) || first == p {
@@ -63,7 +59,7 @@ fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
     false
 }
 
-fn collect_files(dir: &Path, user_patterns: &[String]) -> Result<Vec<PathBuf>, CommandError> {
+pub(crate) fn collect_files(dir: &Path, user_patterns: &[String]) -> Result<Vec<PathBuf>, CommandError> {
     let mut files = Vec::new();
     collect_recursive(dir, dir, user_patterns, &mut files)?;
     Ok(files)
@@ -97,7 +93,7 @@ fn collect_recursive(
     Ok(())
 }
 
-fn pack(dir: &Path) -> Result<Vec<u8>, CommandError> {
+pub(crate) fn pack(dir: &Path) -> Result<Vec<u8>, CommandError> {
     let patterns = read_ignore_patterns(dir);
     let files = collect_files(dir, &patterns)?;
 
@@ -250,7 +246,7 @@ pub struct PublishHandler {
 
 #[async_trait]
 impl CommandHandler for PublishHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--tag" => {

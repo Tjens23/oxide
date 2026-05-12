@@ -1,8 +1,5 @@
 use std::{
     collections::HashMap,
-    env::Args,
-    fs::File,
-    io::Write,
     sync::{Arc, Mutex},
 };
 
@@ -13,9 +10,10 @@ use serde_json::Value;
 use crate::{
     cache::{Cache, CACHE_DIRECTORY},
     errors::{CommandError, ParseError},
-    installer::{DependencyMapMutex, InstallContext, Installer, PackageInfo},
+    installer::{InstallContext, Installer, PackageInfo},
     util::TaskAllocator,
     versions::Versions,
+    workspace,
 };
 
 use super::command_handler::CommandHandler;
@@ -23,7 +21,8 @@ use super::command_handler::CommandHandler;
 #[derive(Default)]
 pub struct InstallHandler {
     pub package_name: String,
-    pub semantic_version: Option<VersionReq>, // If None then assume latest version.
+    pub semantic_version: Option<VersionReq>,
+    filter: Option<String>,
 }
 
 impl InstallHandler {
@@ -31,6 +30,7 @@ impl InstallHandler {
         Self {
             package_name,
             semantic_version: None,
+            filter: None,
         }
     }
 }
@@ -55,51 +55,31 @@ impl InstallHandler {
         Ok(())
     }
 
-    fn write_lockfiles(dependency_map_mux: DependencyMapMutex) -> Result<(), CommandError> {
-        let dependency_map = dependency_map_mux.lock().unwrap();
-
-        for (package_name, package_lock) in dependency_map.iter() {
-            let package_dir = format!("{}/{}/package", *CACHE_DIRECTORY, package_name);
-            std::fs::create_dir_all(&package_dir).map_err(CommandError::FailedToCreateFile)?;
-
-            let mut package_lock_file = File::create(format!("{}/oxide-lock.json", package_dir))
-            .map_err(CommandError::FailedToCreateFile)?;
-
-            let package_lock_string = serde_json::to_string(package_lock)
-                .map_err(CommandError::FailedToSerializePackageLock)?;
-
-            package_lock_file
-                .write_all(package_lock_string.as_bytes())
-                .map_err(CommandError::FailedToWriteFile)?;
-
-            // Create cache-level node_modules so Node.js can resolve deps from
-            // the real (cache) path rather than the project's node_modules.
-            let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package_name);
-            std::fs::create_dir_all(&cache_nm).map_err(CommandError::FailedToCreateFile)?;
-
-            for dep in &package_lock.dependencies {
-                let (dep_name, _) = Versions::parse_raw_package_details(dep.clone());
-                let dep_src = format!("{}/{}/package", *CACHE_DIRECTORY, dep);
-                let dep_dest = format!("{}/{}", cache_nm, dep_name);
-                if let Some(parent) = std::path::Path::new(&dep_dest).parent() {
-                    std::fs::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;
-                }
-                match crate::util::create_dir_link(&dep_src, &dep_dest) {
-                    Ok(_) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                    Err(e) => return Err(CommandError::FailedToCreateFile(e)),
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 #[async_trait]
 impl CommandHandler for InstallHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
-        let package_details = args
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
+        let mut rest: Vec<String> = args.collect();
+
+        let mut i = 0;
+        while i < rest.len() {
+            match rest[i].as_str() {
+                "--filter" | "-F" => {
+                    let pat = rest
+                        .get(i + 1)
+                        .cloned()
+                        .ok_or_else(|| ParseError::MissingArgument("--filter <pattern>".to_string()))?;
+                    self.filter = Some(pat);
+                    rest.remove(i);
+                    rest.remove(i);
+                }
+                _ => i += 1,
+            }
+        }
+
+        let package_details = rest
+            .into_iter()
             .next()
             .ok_or(ParseError::MissingArgument(String::from("package name")))?;
 
@@ -112,6 +92,33 @@ impl CommandHandler for InstallHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
+        if let Some(ref filter) = self.filter {
+            let root = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
+            let packages = workspace::discover(&root)?;
+            let matched = workspace::apply_filter(&packages, filter);
+
+            if matched.is_empty() {
+                println!("No workspace packages matched filter '{}'.", filter);
+                return Ok(());
+            }
+
+            for pkg in &matched {
+                println!("\n[{}] installing '{}'..", pkg.name, self.package_name);
+                std::env::set_current_dir(&pkg.path)
+                    .map_err(CommandError::FailedToWriteFile)?;
+                Box::pin(self.execute_single()).await?;
+            }
+
+            std::env::set_current_dir(&root).map_err(CommandError::FailedToWriteFile)?;
+            return Ok(());
+        }
+
+        self.execute_single().await
+    }
+}
+
+impl InstallHandler {
+    async fn execute_single(&self) -> Result<(), CommandError> {
         // In future we could automatically find a version that is valid for both limits to save storage, but that's not neccessary right now
         println!("Installing '{}'..", self.package_name);
 
@@ -129,6 +136,12 @@ impl CommandHandler for InstallHandler {
 
         if is_cached {
             let version = cached_version.expect("Could not resolve version of cached package");
+            if !crate::util::is_safe_path_component(&version) {
+                return Err(CommandError::GitFailed(format!(
+                    "unsafe version string in cache: {}",
+                    version
+                )));
+            }
             let stringified = Versions::stringify(&self.package_name, &version);
             let lockfile_path = format!(
                 "{}/{}/package/oxide-lock.json",
@@ -168,6 +181,13 @@ impl CommandHandler for InstallHandler {
         let resolved_name = version_data.name.clone();
         let resolved_version = version_data.version.clone();
 
+        if !crate::util::is_safe_path_component(&stringified) {
+            return Err(CommandError::GitFailed(format!(
+                "unsafe package identifier received from registry: {}",
+                stringified
+            )));
+        }
+
         let package_info = PackageInfo {
             version_data,
             is_latest: Versions::is_latest(full_version),
@@ -183,7 +203,8 @@ impl CommandHandler for InstallHandler {
         // Blocks the main thread however it's not going to have a huge performance impact on tokio
         TaskAllocator::block_until_done();
 
-        Self::write_lockfiles(dependency_map_mux)?;
+        Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
+        Installer::write_project_lockfile(dependency_map_mux)?;
         Cache::load_cached_version(stringified);
         Self::update_package_json(&resolved_name, &resolved_version)?;
 

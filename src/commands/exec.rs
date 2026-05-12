@@ -1,4 +1,3 @@
-use std::env::Args;
 use std::process::Command;
 
 use async_trait::async_trait;
@@ -16,7 +15,7 @@ pub struct ExecHandler {
 
 #[async_trait]
 impl CommandHandler for ExecHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--shell-mode" | "-c" => self.shell_mode = true,

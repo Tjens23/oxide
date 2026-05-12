@@ -1,4 +1,3 @@
-use std::env::Args;
 
 use async_trait::async_trait;
 
@@ -24,7 +23,7 @@ impl UpgradeHandler {
 
 #[async_trait]
 impl CommandHandler for UpgradeHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         self.package_name = args
             .next()
             .ok_or(ParseError::MissingArgument(String::from("package name")))?;

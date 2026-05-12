@@ -6,6 +6,11 @@ mod installer;
 mod types;
 mod util;
 mod versions;
+mod workspace;
+
+#[cfg(test)]
+#[path = "tests/test.rs"]
+mod tests;
 
 use std::env;
 

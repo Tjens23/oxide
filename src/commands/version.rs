@@ -1,4 +1,3 @@
-use std::env::Args;
 use std::fs;
 use std::process::Command;
 
@@ -16,7 +15,7 @@ pub struct VersionHandler {
 
 #[async_trait]
 impl CommandHandler for VersionHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         self.bump = args.next().ok_or(ParseError::MissingArgument(
             String::from("version bump (major|minor|patch) or explicit semver"),
         ))?;

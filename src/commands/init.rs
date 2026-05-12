@@ -1,6 +1,5 @@
 use std::{
     env,
-    env::Args,
     fs::File,
     io::{self, BufRead, Write},
 };
@@ -56,7 +55,7 @@ fn prompt(label: &str, default: &str) -> String {
 
 #[async_trait]
 impl CommandHandler for InitHandler {
-    fn parse(&mut self, _args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, _args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         Ok(())
     }
 

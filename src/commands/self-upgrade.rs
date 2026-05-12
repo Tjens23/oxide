@@ -1,4 +1,3 @@
-use std::env::Args;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -29,7 +28,7 @@ pub struct SelfUpgradeHandler;
 
 #[async_trait]
 impl CommandHandler for SelfUpgradeHandler {
-    fn parse(&mut self, _args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, _args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         Ok(())
     }
 

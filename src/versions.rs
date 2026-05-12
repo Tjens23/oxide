@@ -15,7 +15,6 @@ pub const EMPTY_VERSION: Version = Version::new(0, 0, 0);
 pub struct Versions;
 
 impl Versions {
-    /// Parses a raw "name@version" filename into `(name, version)`.
     pub fn parse_raw_package_details(filename: String) -> (String, String) {
         if filename.starts_with('@') {
             // Scoped package: "@scope/name@version" — find the '@' after the '/'
@@ -36,8 +35,13 @@ impl Versions {
         }
     }
 
-    /// Parses user-supplied "name" or "name@constraint" into `(name, version_req)`.
-    /// Returns `None` for the version_req when no version or "latest" is specified.
+    fn validate_package_name(name: &str) -> Result<(), ParseError> {
+        if name.contains("..") || name.contains('\\') || std::path::Path::new(name).is_absolute() {
+            return Err(ParseError::InvalidPackageName(name.to_string()));
+        }
+        Ok(())
+    }
+
     pub fn parse_semantic_package_details(
         package_details: String,
     ) -> Result<(String, Option<VersionReq>), ParseError> {
@@ -47,6 +51,7 @@ impl Versions {
                 let after_slash = &package_details[slash_pos + 1..];
                 if let Some(at_pos) = after_slash.find('@') {
                     let name = package_details[..slash_pos + 1 + at_pos].to_string();
+                    Self::validate_package_name(&name)?;
                     let version_str = &after_slash[at_pos + 1..];
                     if version_str == LATEST {
                         return Ok((name, None));
@@ -55,13 +60,17 @@ impl Versions {
                     return Ok((name, Some(req)));
                 }
             }
-            // No version specified: "@scope/name"
+            Self::validate_package_name(&package_details)?;
             return Ok((package_details, None));
         }
 
         match package_details.split_once('@') {
-            None => Ok((package_details, None)),
+            None => {
+                Self::validate_package_name(&package_details)?;
+                Ok((package_details, None))
+            }
             Some((name, version_str)) => {
+                Self::validate_package_name(name)?;
                 if version_str == LATEST {
                     return Ok((name.to_string(), None));
                 }
@@ -71,8 +80,6 @@ impl Versions {
         }
     }
 
-    /// Parses an npm-style version string into a `VersionReq`.
-    /// Falls back to `*` (any version) for strings that can't be parsed.
     pub fn parse_semantic_version(version: &str) -> Result<VersionReq, ParseError> {
         Self::parse_npm_version_req(version).or_else(|_| Ok(VersionReq::STAR))
     }

@@ -1,5 +1,4 @@
 use std::{
-    env::Args,
     io::{self, BufRead, Write},
     path::PathBuf,
 };
@@ -51,7 +50,7 @@ fn prompt(label: &str) -> String {
 
 #[async_trait]
 impl CommandHandler for LoginHandler {
-    fn parse(&mut self, args: &mut Args) -> Result<(), ParseError> {
+    fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
         while let Some(arg) = args.next() {
             if arg == "--otp" {
                 let otp = args

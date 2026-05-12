@@ -10,5 +10,13 @@ pub mod unlink;
 pub mod upgrade;
 pub mod login;
 pub mod version;
+pub mod outdated;
+pub mod why;
+pub mod ls;
+pub mod pack;
+pub mod doctor;
+pub mod dlx;
+pub mod workspaces;
+pub mod foreach;
 #[path = "self-upgrade.rs"]
 pub mod self_upgrade;

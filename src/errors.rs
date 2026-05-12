@@ -9,6 +9,8 @@ pub enum ParseError {
     MissingArgument(String),
     #[error("invalid version notation ({0})")]
     InvalidVersionNotation(semver::Error),
+    #[error("invalid package name: '{0}'")]
+    InvalidPackageName(String),
 }
 
 #[derive(Error, Debug)]
@@ -43,6 +45,8 @@ pub enum CommandError {
     LoginTimedOut,
     #[error("failed to read file ({0})")]
     FailedToReadFile(Error),
-    #[error("git command failed: {0}")]
+    #[error("{0}")]
     GitFailed(String),
+    #[error("failed to validate package integrity")]
+    IntegrityCheckFailed,
 }
