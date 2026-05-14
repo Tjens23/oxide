@@ -78,20 +78,21 @@ impl CommandHandler for InstallHandler {
             }
         }
 
-        let package_details = rest
-            .into_iter()
-            .next()
-            .ok_or(ParseError::MissingArgument(String::from("package name")))?;
-
-        let (package_name, semantic_version) =
-            Versions::parse_semantic_package_details(package_details)?;
-        self.package_name = package_name;
-        self.semantic_version = semantic_version;
+        if let Some(package_details) = rest.into_iter().next() {
+            let (package_name, semantic_version) =
+                Versions::parse_semantic_package_details(package_details)?;
+            self.package_name = package_name;
+            self.semantic_version = semantic_version;
+        }
 
         Ok(())
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
+        if self.package_name.is_empty() {
+            return self.install_from_package_json().await;
+        }
+
         if let Some(ref filter) = self.filter {
             let root = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
             let packages = workspace::discover(&root)?;
@@ -118,6 +119,46 @@ impl CommandHandler for InstallHandler {
 }
 
 impl InstallHandler {
+    async fn install_from_package_json(&self) -> Result<(), CommandError> {
+        let content = std::fs::read_to_string("./package.json")
+            .map_err(CommandError::FailedToReadFile)?;
+        let json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
+
+        let deps = json
+            .get("dependencies")
+            .and_then(|d| d.as_object())
+            .cloned()
+            .unwrap_or_default();
+
+        if deps.is_empty() {
+            println!("No dependencies found in package.json.");
+            return Ok(());
+        }
+
+        for (name, version_value) in &deps {
+            let version_str = version_value.as_str().unwrap_or("");
+            let package_details = if version_str.is_empty() {
+                name.clone()
+            } else {
+                format!("{}@{}", name, version_str)
+            };
+
+            let (package_name, semantic_version) =
+                Versions::parse_semantic_package_details(package_details)
+                    .map_err(|e| CommandError::GitFailed(e.to_string()))?;
+
+            let handler = InstallHandler {
+                package_name,
+                semantic_version,
+                filter: None,
+            };
+
+            handler.execute_single().await?;
+        }
+
+        Ok(())
+    }
+
     async fn execute_single(&self) -> Result<(), CommandError> {
         // In future we could automatically find a version that is valid for both limits to save storage, but that's not neccessary right now
         println!("Installing '{}'..", self.package_name);
