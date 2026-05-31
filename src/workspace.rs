@@ -2,8 +2,10 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::errors::CommandError;
-
+use crate::{
+    constants::{BIN_DIR, NODE_MODULES, PACKAGE_JSON},
+    errors::CommandError,
+};
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePackage {
@@ -14,8 +16,8 @@ pub struct WorkspacePackage {
 }
 
 pub fn discover(root: &Path) -> Result<Vec<WorkspacePackage>, CommandError> {
-    let raw = std::fs::read_to_string(root.join("package.json"))
-        .map_err(CommandError::FailedToReadFile)?;
+    let raw =
+        std::fs::read_to_string(root.join(PACKAGE_JSON)).map_err(CommandError::FailedToReadFile)?;
     let json: Value = serde_json::from_str(&raw).map_err(CommandError::ParsingFailed)?;
 
     let patterns = extract_patterns(&json);
@@ -71,7 +73,7 @@ fn expand_glob(root: &Path, pattern: &str) -> Vec<PathBuf> {
             .flatten()
             .filter(|e| {
                 let p = e.path();
-                p.is_dir() && p.join("package.json").exists()
+                p.is_dir() && p.join(PACKAGE_JSON).exists()
             })
             .map(|e| e.path())
             .collect();
@@ -81,7 +83,7 @@ fn expand_glob(root: &Path, pattern: &str) -> Vec<PathBuf> {
             return Vec::new();
         }
         let path = root.join(pattern);
-        if path.is_dir() && path.join("package.json").exists() {
+        if path.is_dir() && path.join(PACKAGE_JSON).exists() {
             return vec![path];
         }
     }
@@ -89,8 +91,8 @@ fn expand_glob(root: &Path, pattern: &str) -> Vec<PathBuf> {
 }
 
 fn read_package(dir: &Path) -> Result<WorkspacePackage, CommandError> {
-    let raw = std::fs::read_to_string(dir.join("package.json"))
-        .map_err(CommandError::FailedToReadFile)?;
+    let raw =
+        std::fs::read_to_string(dir.join(PACKAGE_JSON)).map_err(CommandError::FailedToReadFile)?;
     let json: Value = serde_json::from_str(&raw).map_err(CommandError::ParsingFailed)?;
 
     let name = json
@@ -129,7 +131,10 @@ pub fn apply_filter<'a>(
             if pkg.name == pattern {
                 return true;
             }
-            if let Some(prefix) = pattern.strip_suffix("/*").or_else(|| pattern.strip_suffix('*')) {
+            if let Some(prefix) = pattern
+                .strip_suffix("/*")
+                .or_else(|| pattern.strip_suffix('*'))
+            {
                 if pkg.name.starts_with(prefix) {
                     return true;
                 }
@@ -160,7 +165,7 @@ pub fn run_script_in_dir(
     script_cmd: &str,
     extra_args: &[String],
 ) -> Result<std::process::ExitStatus, CommandError> {
-    let local_bin = dir.join("node_modules").join(".bin");
+    let local_bin = dir.join(NODE_MODULES).join(BIN_DIR);
     let path_env = std::env::var("PATH").unwrap_or_default();
     let sep = if cfg!(windows) { ";" } else { ":" };
     let new_path = if local_bin.exists() {

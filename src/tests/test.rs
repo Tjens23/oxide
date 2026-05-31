@@ -1,28 +1,20 @@
 use crate::{
     commands::{
-        command_handler::CommandHandler,
-        dlx::DlxHandler,
-        doctor::DoctorHandler,
-        foreach::ForeachHandler,
-        install::InstallHandler,
-        link::LinkHandler,
-        ls::LsHandler,
-        outdated::OutdatedHandler,
-        pack::PackHandler,
-        publish::PublishHandler,
-        run::RunHandler,
-        unlink::UnlinkHandler,
-        why::WhyHandler,
-        workspaces::WorkspacesHandler,
+        command_handler::CommandHandler, dlx::DlxHandler, doctor::DoctorHandler,
+        foreach::ForeachHandler, install::InstallHandler, link::LinkHandler, ls::LsHandler,
+        outdated::OutdatedHandler, pack::PackHandler, publish::PublishHandler, run::RunHandler,
+        unlink::UnlinkHandler, why::WhyHandler, workspaces::WorkspacesHandler,
     },
     versions::Versions,
     workspace,
 };
 
 fn args(v: &[&str]) -> impl Iterator<Item = String> {
-    v.iter().map(|s| s.to_string()).collect::<Vec<_>>().into_iter()
+    v.iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .into_iter()
 }
-
 
 #[test]
 fn test_stringify() {
@@ -48,12 +40,10 @@ fn test_parse_raw_no_version() {
 
 #[test]
 fn test_parse_raw_scoped_package() {
-    let (name, version) =
-        Versions::parse_raw_package_details("@myorg/ui@1.2.3".to_string());
+    let (name, version) = Versions::parse_raw_package_details("@myorg/ui@1.2.3".to_string());
     assert_eq!(name, "@myorg/ui");
     assert_eq!(version, "1.2.3");
 }
-
 
 #[test]
 fn test_link_parse() {
@@ -112,9 +102,19 @@ fn test_dlx_parse_missing_package_errors() {
 #[test]
 fn test_resolve_binary_string_bin_field() {
     use crate::commands::dlx::resolve_binary;
-    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-string-bin-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    let dir = std::env::temp_dir().join(format!(
+        "oxide-dlx-test-string-bin-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("package.json"), r#"{"name":"tsconfig","version":"1.0.0","bin":"dist/index.js"}"#).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"name":"tsconfig","version":"1.0.0","bin":"dist/index.js"}"#,
+    )
+    .unwrap();
     let result = resolve_binary(dir.to_str().unwrap(), "tsconfig", None).unwrap();
     assert_eq!(result, format!("{}/dist/index.js", dir.to_str().unwrap()));
     std::fs::remove_dir_all(&dir).unwrap();
@@ -123,9 +123,19 @@ fn test_resolve_binary_string_bin_field() {
 #[test]
 fn test_resolve_binary_object_bin_field_matching_key() {
     use crate::commands::dlx::resolve_binary;
-    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-obj-bin-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    let dir = std::env::temp_dir().join(format!(
+        "oxide-dlx-test-obj-bin-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("package.json"), r#"{"name":"tsconfig","version":"1.0.0","bin":{"tsconfig":"dist/index.js"}}"#).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"name":"tsconfig","version":"1.0.0","bin":{"tsconfig":"dist/index.js"}}"#,
+    )
+    .unwrap();
     let result = resolve_binary(dir.to_str().unwrap(), "tsconfig", None).unwrap();
     assert_eq!(result, format!("{}/dist/index.js", dir.to_str().unwrap()));
     std::fs::remove_dir_all(&dir).unwrap();
@@ -134,9 +144,19 @@ fn test_resolve_binary_object_bin_field_matching_key() {
 #[test]
 fn test_resolve_binary_object_bin_field_binary_override() {
     use crate::commands::dlx::resolve_binary;
-    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-bin-override-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    let dir = std::env::temp_dir().join(format!(
+        "oxide-dlx-test-bin-override-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("package.json"), r#"{"name":"mypkg","version":"1.0.0","bin":{"cli":"dist/cli.js","other":"dist/other.js"}}"#).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"name":"mypkg","version":"1.0.0","bin":{"cli":"dist/cli.js","other":"dist/other.js"}}"#,
+    )
+    .unwrap();
     let result = resolve_binary(dir.to_str().unwrap(), "mypkg", Some("other")).unwrap();
     assert_eq!(result, format!("{}/dist/other.js", dir.to_str().unwrap()));
     std::fs::remove_dir_all(&dir).unwrap();
@@ -145,9 +165,19 @@ fn test_resolve_binary_object_bin_field_binary_override() {
 #[test]
 fn test_resolve_binary_no_bin_field_errors() {
     use crate::commands::dlx::resolve_binary;
-    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-no-bin-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    let dir = std::env::temp_dir().join(format!(
+        "oxide-dlx-test-no-bin-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("package.json"), r#"{"name":"mypkg","version":"1.0.0"}"#).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"name":"mypkg","version":"1.0.0"}"#,
+    )
+    .unwrap();
     assert!(resolve_binary(dir.to_str().unwrap(), "mypkg", None).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -172,7 +202,10 @@ fn test_non_js_extension_not_detected() {
 #[test]
 fn test_parse_shebang_env_node() {
     use crate::commands::dlx::parse_shebang;
-    assert_eq!(parse_shebang("#!/usr/bin/env node"), Some("node".to_string()));
+    assert_eq!(
+        parse_shebang("#!/usr/bin/env node"),
+        Some("node".to_string())
+    );
 }
 
 #[test]
@@ -184,7 +217,10 @@ fn test_parse_shebang_env_bun() {
 #[test]
 fn test_parse_shebang_env_deno() {
     use crate::commands::dlx::parse_shebang;
-    assert_eq!(parse_shebang("#!/usr/bin/env deno"), Some("deno".to_string()));
+    assert_eq!(
+        parse_shebang("#!/usr/bin/env deno"),
+        Some("deno".to_string())
+    );
 }
 
 #[test]
@@ -208,7 +244,13 @@ fn test_parse_shebang_empty() {
 #[test]
 fn test_resolve_interpreter_uses_shebang() {
     use crate::commands::dlx::resolve_interpreter;
-    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-shebang-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    let dir = std::env::temp_dir().join(format!(
+        "oxide-dlx-test-shebang-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     let script = dir.join("index.js");
     std::fs::write(&script, "#!/usr/bin/env bun\nconsole.log('hi')").unwrap();
@@ -219,7 +261,13 @@ fn test_resolve_interpreter_uses_shebang() {
 #[test]
 fn test_resolve_interpreter_falls_back_to_node() {
     use crate::commands::dlx::resolve_interpreter;
-    let dir = std::env::temp_dir().join(format!("oxide-dlx-test-noshebang-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()));
+    let dir = std::env::temp_dir().join(format!(
+        "oxide-dlx-test-noshebang-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     let script = dir.join("index.js");
     std::fs::write(&script, "console.log('hi')").unwrap();
@@ -233,7 +281,6 @@ fn test_resolve_interpreter_missing_file_falls_back_to_node() {
     assert_eq!(resolve_interpreter("/nonexistent/path/index.js"), "node");
 }
 
-
 #[test]
 fn test_why_parse() {
     let mut h = WhyHandler::default();
@@ -245,7 +292,6 @@ fn test_why_parse_missing_arg_errors() {
     let mut h = WhyHandler::default();
     assert!(h.parse(&mut args(&[])).is_err());
 }
-
 
 #[test]
 fn test_ls_parse_all_flag() {
@@ -259,7 +305,6 @@ fn test_ls_parse_dev_flag() {
     h.parse(&mut args(&["--dev"])).unwrap();
 }
 
-
 #[test]
 fn test_pack_parse_out_dir() {
     let mut h = PackHandler::default();
@@ -272,7 +317,6 @@ fn test_pack_parse_missing_out_dir_value_errors() {
     assert!(h.parse(&mut args(&["--out-dir"])).is_err());
 }
 
-
 #[test]
 fn test_install_parse_plain() {
     let mut h = InstallHandler::default();
@@ -282,7 +326,8 @@ fn test_install_parse_plain() {
 #[test]
 fn test_install_parse_with_filter() {
     let mut h = InstallHandler::default();
-    h.parse(&mut args(&["--filter", "@myorg/ui", "lodash"])).unwrap();
+    h.parse(&mut args(&["--filter", "@myorg/ui", "lodash"]))
+        .unwrap();
 }
 
 #[test]
@@ -290,7 +335,6 @@ fn test_install_parse_filter_shorthand() {
     let mut h = InstallHandler::default();
     h.parse(&mut args(&["-F", "api", "express"])).unwrap();
 }
-
 
 #[test]
 fn test_run_parse_plain_script() {
@@ -301,7 +345,8 @@ fn test_run_parse_plain_script() {
 #[test]
 fn test_run_parse_filter() {
     let mut h = RunHandler::default();
-    h.parse(&mut args(&["test", "--filter", "@myorg/ui"])).unwrap();
+    h.parse(&mut args(&["test", "--filter", "@myorg/ui"]))
+        .unwrap();
 }
 
 #[test]
@@ -322,7 +367,6 @@ fn test_run_parse_filter_shorthand() {
     h.parse(&mut args(&["-F", "api", "test"])).unwrap();
 }
 
-
 #[test]
 fn test_workspaces_parse_no_args() {
     let mut h = WorkspacesHandler::default();
@@ -341,7 +385,6 @@ fn test_workspaces_parse_filter_missing_value_errors() {
     assert!(h.parse(&mut args(&["--filter"])).is_err());
 }
 
-
 #[test]
 fn test_foreach_parse_bare_script() {
     let mut h = ForeachHandler::default();
@@ -357,7 +400,8 @@ fn test_foreach_parse_run_prefix() {
 #[test]
 fn test_foreach_parse_filter() {
     let mut h = ForeachHandler::default();
-    h.parse(&mut args(&["test", "--filter", "@myorg/ui"])).unwrap();
+    h.parse(&mut args(&["test", "--filter", "@myorg/ui"]))
+        .unwrap();
 }
 
 #[test]
@@ -383,7 +427,6 @@ fn test_foreach_run_prefix_missing_script_errors() {
     let mut h = ForeachHandler::default();
     assert!(h.parse(&mut args(&["run"])).is_err());
 }
-
 
 fn ws_pkg(name: &str, path: &str) -> workspace::WorkspacePackage {
     workspace::WorkspacePackage {
@@ -418,10 +461,7 @@ fn test_workspace_filter_scope_wildcard() {
 
 #[test]
 fn test_workspace_filter_path_substring() {
-    let pkgs = vec![
-        ws_pkg("ui", "packages/ui"),
-        ws_pkg("cli", "apps/cli"),
-    ];
+    let pkgs = vec![ws_pkg("ui", "packages/ui"), ws_pkg("cli", "apps/cli")];
     let matched = workspace::apply_filter(&pkgs, "apps");
     assert_eq!(matched.len(), 1);
     assert_eq!(matched[0].name, "cli");
@@ -439,7 +479,6 @@ fn test_workspace_filter_no_match() {
     let pkgs = vec![ws_pkg("@myorg/ui", "packages/ui")];
     assert!(workspace::apply_filter(&pkgs, "nonexistent").is_empty());
 }
-
 
 fn tmp_dir(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
@@ -544,10 +583,10 @@ fn test_workspace_discover_sorted_by_name() {
 
 #[cfg(test)]
 mod integrity_tests {
-    use bytes::Bytes;
-    use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-    use sha2::{Digest, Sha512};
     use crate::util::verify_integrity;
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+    use bytes::Bytes;
+    use sha2::{Digest, Sha512};
 
     fn make_integrity(data: &[u8]) -> String {
         let digest = Sha512::digest(data);
@@ -565,7 +604,7 @@ mod integrity_tests {
     #[test]
     fn test_tampered_bytes_fail() {
         let data = b"hello world";
-        let tampered = Bytes::from_static(b"hello world!");  // one extra char
+        let tampered = Bytes::from_static(b"hello world!"); // one extra char
         let integrity = make_integrity(data);
         assert!(!verify_integrity(&tampered, &integrity));
     }
@@ -589,7 +628,7 @@ mod integrity_tests {
     fn test_malformed_integrity_string() {
         let bytes = Bytes::from_static(b"hello");
         assert!(!verify_integrity(&bytes, "not-an-integrity-string"));
-        assert!(!verify_integrity(&bytes, "sha512-"));       // empty digest
-        assert!(!verify_integrity(&bytes, "sha512-!!!!!!"));  // invalid base64
+        assert!(!verify_integrity(&bytes, "sha512-")); // empty digest
+        assert!(!verify_integrity(&bytes, "sha512-!!!!!!")); // invalid base64
     }
 }

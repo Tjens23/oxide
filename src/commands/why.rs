@@ -1,8 +1,10 @@
-
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::errors::{CommandError, ParseError};
+use crate::{
+    constants::PACKAGE_JSON,
+    errors::{CommandError, ParseError},
+};
 
 use super::command_handler::CommandHandler;
 
@@ -24,8 +26,8 @@ impl CommandHandler for WhyHandler {
         let target = &self.package_name;
 
         // Read the project's package.json
-        let pkg_raw = std::fs::read_to_string("./package.json")
-            .map_err(CommandError::FailedToReadFile)?;
+        let pkg_raw =
+            std::fs::read_to_string("./package.json").map_err(CommandError::FailedToReadFile)?;
         let pkg_json: Value =
             serde_json::from_str(&pkg_raw).map_err(CommandError::ParsingFailed)?;
 
@@ -44,7 +46,10 @@ impl CommandHandler for WhyHandler {
         // Check whether the package is actually installed
         let installed_version = read_installed_version(target);
         if installed_version.is_none() && in_deps.is_none() && in_dev_deps.is_none() {
-            println!("'{}' is not installed and not listed in package.json.", target);
+            println!(
+                "'{}' is not installed and not listed in package.json.",
+                target
+            );
             return Ok(());
         }
 
@@ -80,12 +85,12 @@ impl CommandHandler for WhyHandler {
                 match std::fs::read_dir(&path) {
                     Ok(inner) => inner
                         .flatten()
-                        .map(|e| e.path().join("package.json"))
+                        .map(|e| e.path().join(PACKAGE_JSON))
                         .collect(),
                     Err(_) => continue,
                 }
             } else {
-                vec![path.join("package.json")]
+                vec![path.join(PACKAGE_JSON)]
             };
 
             for pkg_json_path in pkg_jsons {

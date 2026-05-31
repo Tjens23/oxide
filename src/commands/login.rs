@@ -5,7 +5,7 @@ use std::{
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use crate::{
     errors::{CommandError, ParseError},
@@ -92,7 +92,10 @@ async fn web_login(client: &reqwest::Client) -> Result<String, CommandError> {
         .map_err(CommandError::HTTPFailed)?;
 
     let status = resp.status();
-    let body = resp.text().await.map_err(CommandError::FailedResponseText)?;
+    let body = resp
+        .text()
+        .await
+        .map_err(CommandError::FailedResponseText)?;
 
     if !status.is_success() {
         return Err(CommandError::LoginFailed {
@@ -124,7 +127,10 @@ async fn web_login(client: &reqwest::Client) -> Result<String, CommandError> {
             .map_err(CommandError::HTTPFailed)?;
 
         if poll.status() == reqwest::StatusCode::OK {
-            let poll_body = poll.text().await.map_err(CommandError::FailedResponseText)?;
+            let poll_body = poll
+                .text()
+                .await
+                .map_err(CommandError::FailedResponseText)?;
             let done: DoneResponse =
                 serde_json::from_str(&poll_body).map_err(CommandError::ParsingFailed)?;
             if let Some(t) = done.token {
@@ -141,7 +147,10 @@ async fn web_login(client: &reqwest::Client) -> Result<String, CommandError> {
     Err(CommandError::LoginTimedOut)
 }
 
-async fn classic_login(client: &reqwest::Client, otp: Option<&str>) -> Result<String, CommandError> {
+async fn classic_login(
+    client: &reqwest::Client,
+    otp: Option<&str>,
+) -> Result<String, CommandError> {
     let username = prompt("Username");
     let password = rpassword::prompt_password("Password: ")
         .map_err(|e| CommandError::FailedToWriteFile(e.into()))?;
@@ -169,7 +178,11 @@ async fn classic_login(client: &reqwest::Client, otp: Option<&str>) -> Result<St
         req = req.header("npm-otp", code);
     }
 
-    let resp = req.body(body).send().await.map_err(CommandError::HTTPFailed)?;
+    let resp = req
+        .body(body)
+        .send()
+        .await
+        .map_err(CommandError::HTTPFailed)?;
 
     let status = resp.status();
 
@@ -184,7 +197,10 @@ async fn classic_login(client: &reqwest::Client, otp: Option<&str>) -> Result<St
         }
     }
 
-    let resp_body = resp.text().await.map_err(CommandError::FailedResponseText)?;
+    let resp_body = resp
+        .text()
+        .await
+        .map_err(CommandError::FailedResponseText)?;
 
     if !status.is_success() {
         return Err(CommandError::LoginFailed {
@@ -197,7 +213,10 @@ async fn classic_login(client: &reqwest::Client, otp: Option<&str>) -> Result<St
         serde_json::from_str(&resp_body).map_err(CommandError::ParsingFailed)?;
 
     if let Some(err) = parsed.error {
-        return Err(CommandError::LoginFailed { status: status.as_u16(), body: err });
+        return Err(CommandError::LoginFailed {
+            status: status.as_u16(),
+            body: err,
+        });
     }
 
     parsed.token.ok_or_else(|| CommandError::LoginFailed {
@@ -237,12 +256,11 @@ fn save_token(token: &str) -> Result<(), CommandError> {
         return Ok(());
     }
     // Fall back to credentials file
-    let path = credentials_file()
-        .ok_or_else(|| CommandError::FailedToWriteFile(std::io::Error::other("cannot determine config directory")))?;
+    let path = credentials_file().ok_or_else(|| {
+        CommandError::FailedToWriteFile(std::io::Error::other("cannot determine config directory"))
+    })?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(CommandError::FailedToWriteFile)?;
+        std::fs::create_dir_all(parent).map_err(CommandError::FailedToWriteFile)?;
     }
-    std::fs::write(&path, token)
-        .map_err(CommandError::FailedToWriteFile)
+    std::fs::write(&path, token).map_err(CommandError::FailedToWriteFile)
 }

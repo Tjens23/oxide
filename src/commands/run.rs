@@ -4,7 +4,11 @@ use std::process::Command;
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use crate::{errors::{CommandError, ParseError}, workspace};
+use crate::{
+    constants::{BIN_DIR, NODE_MODULES, PACKAGE_JSON},
+    errors::{CommandError, ParseError},
+    workspace,
+};
 
 use super::command_handler::CommandHandler;
 
@@ -31,10 +35,9 @@ impl CommandHandler for RunHandler {
         while i < rest.len() {
             match rest[i].as_str() {
                 "--filter" | "-F" => {
-                    let pat = rest
-                        .get(i + 1)
-                        .cloned()
-                        .ok_or_else(|| ParseError::MissingArgument("--filter <pattern>".to_string()))?;
+                    let pat = rest.get(i + 1).cloned().ok_or_else(|| {
+                        ParseError::MissingArgument("--filter <pattern>".to_string())
+                    })?;
                     self.filter = Some(pat);
                     rest.remove(i);
                     rest.remove(i);
@@ -64,13 +67,13 @@ impl CommandHandler for RunHandler {
         }
 
         let cwd = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
-        let pkg_path = cwd.join("package.json");
+        let pkg_path = cwd.join(PACKAGE_JSON);
 
-        let contents = std::fs::read_to_string(&pkg_path)
-            .map_err(|e| CommandError::FailedToReadFile(e))?;
+        let contents =
+            std::fs::read_to_string(&pkg_path).map_err(|e| CommandError::FailedToReadFile(e))?;
 
-        let pkg: PackageJson = serde_json::from_str(&contents)
-            .map_err(|e| CommandError::ParsingFailed(e))?;
+        let pkg: PackageJson =
+            serde_json::from_str(&contents).map_err(|e| CommandError::ParsingFailed(e))?;
 
         let scripts = pkg.scripts.unwrap_or_default();
 
@@ -96,7 +99,7 @@ impl CommandHandler for RunHandler {
             ))
         })?;
 
-        let local_bin = cwd.join("node_modules").join(".bin");
+        let local_bin = cwd.join(NODE_MODULES).join(BIN_DIR);
         let path_env = std::env::var("PATH").unwrap_or_default();
         let new_path = if local_bin.exists() {
             format!(
@@ -180,7 +183,7 @@ impl RunHandler {
         let mut failures = 0usize;
 
         for pkg in &matched {
-            let pkg_json_raw = std::fs::read_to_string(pkg.path.join("package.json"))
+            let pkg_json_raw = std::fs::read_to_string(pkg.path.join(PACKAGE_JSON))
                 .map_err(CommandError::FailedToReadFile)?;
             let pkg_json: serde_json::Value =
                 serde_json::from_str(&pkg_json_raw).map_err(CommandError::ParsingFailed)?;
@@ -191,7 +194,10 @@ impl RunHandler {
                 .and_then(|v| v.as_str());
 
             let Some(cmd) = cmd_str else {
-                println!("\n[{}] script '{}' not found — skipping", pkg.name, script_name);
+                println!(
+                    "\n[{}] script '{}' not found — skipping",
+                    pkg.name, script_name
+                );
                 continue;
             };
 

@@ -7,7 +7,10 @@ use std::{
 use async_trait::async_trait;
 use serde::Serialize;
 
-use crate::errors::{CommandError, ParseError};
+use crate::{
+    constants::PACKAGE_JSON,
+    errors::{CommandError, ParseError},
+};
 
 use super::command_handler::CommandHandler;
 
@@ -92,12 +95,11 @@ impl CommandHandler for InitHandler {
         let json = serde_json::to_string_pretty(&package_json)
             .map_err(CommandError::FailedToSerializePackageLock)?;
 
-        let mut file =
-            File::create("package.json").map_err(CommandError::FailedToCreateFile)?;
+        let mut file = File::create(PACKAGE_JSON).map_err(CommandError::FailedToCreateFile)?;
         file.write_all(json.as_bytes())
             .map_err(CommandError::FailedToWriteFile)?;
 
-        println!("\nWrote to package.json");
+        println!("\nWrote to {}", PACKAGE_JSON);
         Ok(())
     }
 }

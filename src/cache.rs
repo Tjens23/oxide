@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self as fs_sync},
+    path::PathBuf,
     str::FromStr,
 };
 
@@ -9,9 +10,10 @@ use semver::Version;
 use tokio::fs;
 
 use crate::{
+    constants::{CACHE_SUBDIR, NODE_MODULES, OXIDE_LOCK},
     errors::CommandError,
     types::PackageLock,
-    versions::{Versions, EMPTY_VERSION, LATEST},
+    versions::{EMPTY_VERSION, LATEST, Versions},
 };
 use semver::VersionReq;
 
@@ -22,25 +24,36 @@ pub struct CachedVersion {
 
 pub type CachedVersions = HashMap<String, CachedVersion>;
 
+fn init_cache_dir() -> String {
+    match dirs::cache_dir().and_then(|p| p.to_str().map(|s| format!("{}/{}", s, CACHE_SUBDIR))) {
+        Some(dir) => dir,
+        None => {
+            eprintln!("Fatal: could not determine system cache directory");
+            std::process::exit(1);
+        }
+    }
+}
+
 lazy_static! {
-    pub static ref CACHE_DIRECTORY: String = format!(
-        "{}/node-cache",
-        dirs::cache_dir()
-            .expect("Failed to find cache directory")
-            .to_str()
-            .expect("Failed to convert cache directory to string")
-    );
+    pub static ref CACHE_DIRECTORY: String = init_cache_dir();
     pub static ref CACHED_VERSIONS: CachedVersions = Cache::get_cached_versions();
 }
 
 pub struct Cache;
 impl Cache {
     pub fn get_cached_versions() -> CachedVersions {
-        fs_sync::create_dir_all(CACHE_DIRECTORY.to_string())
-            .expect("Failed to create cache directory");
+        if let Err(e) = fs_sync::create_dir_all(CACHE_DIRECTORY.as_str()) {
+            eprintln!("Warning: could not create cache directory: {e}");
+            return HashMap::new();
+        }
 
-        let dir_contents =
-            fs_sync::read_dir(CACHE_DIRECTORY.to_string()).expect("Failed to read cache directory");
+        let dir_contents = match fs_sync::read_dir(CACHE_DIRECTORY.as_str()) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("Warning: could not read cache directory: {e}");
+                return HashMap::new();
+            }
+        };
 
         let mut all_entries: Vec<String> = Vec::new();
         let mut cached_versions = HashMap::new();
@@ -48,7 +61,7 @@ impl Cache {
         for entry in dir_contents.flatten() {
             let filename = entry.file_name().to_string_lossy().to_string();
             if filename.starts_with('@') {
-                let scope_dir = format!("{}/{}", *CACHE_DIRECTORY, filename);
+                let scope_dir = PathBuf::from(CACHE_DIRECTORY.as_str()).join(&filename);
                 if let Ok(scope_contents) = fs_sync::read_dir(&scope_dir) {
                     for scope_entry in scope_contents.flatten() {
                         let pkg = scope_entry.file_name().to_string_lossy().to_string();
@@ -64,10 +77,10 @@ impl Cache {
             if !crate::util::is_safe_path_component(&full_entry) {
                 continue;
             }
-            let lock_path = format!(
-                "{}/{}/package/oxide-lock.json",
-                *CACHE_DIRECTORY, full_entry
-            );
+            let lock_path = PathBuf::from(CACHE_DIRECTORY.as_str())
+                .join(&full_entry)
+                .join("package")
+                .join(OXIDE_LOCK);
 
             let is_latest = match fs_sync::read_to_string(&lock_path)
                 .ok()
@@ -107,14 +120,13 @@ impl Cache {
             if let Some(slash_pos) = package_name.find('/') {
                 let scope = &package_name[..slash_pos];
                 let pkg_within_scope = &package_name[slash_pos + 1..];
-                let scope_dir = format!("{}/{}", *CACHE_DIRECTORY, scope);
+                let scope_dir = PathBuf::from(CACHE_DIRECTORY.as_str()).join(scope);
 
                 if let Ok(mut scope_entries) = fs::read_dir(&scope_dir).await {
                     while let Some(scope_entry) = scope_entries
                         .next_entry()
                         .await
-                        .map_err(CommandError::FailedDirectoryEntry)
-                        .unwrap()
+                        .map_err(CommandError::FailedDirectoryEntry)?
                     {
                         let filename = scope_entry.file_name().to_string_lossy().to_string();
                         if !filename.starts_with(pkg_within_scope) {
@@ -135,15 +147,14 @@ impl Cache {
             return Ok((false, None));
         }
 
-        let mut cache_entries = fs::read_dir(CACHE_DIRECTORY.to_string())
+        let mut cache_entries = fs::read_dir(CACHE_DIRECTORY.as_str())
             .await
             .map_err(CommandError::NoCacheDirectory)?;
 
         while let Some(cache_entry) = cache_entries
             .next_entry()
             .await
-            .map_err(CommandError::FailedDirectoryEntry)
-            .unwrap()
+            .map_err(CommandError::FailedDirectoryEntry)?
         {
             let filename = cache_entry.file_name().to_string_lossy().to_string();
             if !filename.starts_with(package_name.as_str()) {
@@ -177,48 +188,50 @@ impl Cache {
         }
     }
 
-    pub fn load_cached_version(package: String) {
+    pub fn load_cached_version(package: String) -> Result<(), CommandError> {
         if !crate::util::is_safe_path_component(&package) {
-            panic!("unsafe package path component: {}", package);
+            return Err(CommandError::GitFailed(format!(
+                "unsafe package path component: {}",
+                package
+            )));
         }
-        let lockfile_path = format!(
-            "{}/{}/package/oxide-lock.json",
-            *CACHE_DIRECTORY, package
-        );
+        let lockfile_path = PathBuf::from(CACHE_DIRECTORY.as_str())
+            .join(&package)
+            .join("package")
+            .join(OXIDE_LOCK);
 
         // If no lockfile exists (e.g. from a previously failed install), just link the package itself.
-        let dependencies: Vec<String> = match fs_sync::read_to_string(&lockfile_path) {
-            Ok(raw) => {
-                let lockfile = serde_json::from_str::<PackageLock>(raw.as_str()).unwrap();
-                lockfile.dependencies
-            }
-            Err(_) => vec![],
-        };
+        let dependencies: Vec<String> = fs_sync::read_to_string(&lockfile_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<PackageLock>(&raw).ok())
+            .map(|lf| lf.dependencies)
+            .unwrap_or_default();
 
         // Create cache-level node_modules so Node.js can resolve deps from
         // the real (cache) path rather than the project's node_modules.
-        let cache_nm = format!("{}/{}/node_modules", *CACHE_DIRECTORY, package);
-        fs_sync::create_dir_all(&cache_nm).expect("Failed to create cache node_modules");
+        let cache_root = PathBuf::from(CACHE_DIRECTORY.as_str());
+        let cache_nm = cache_root.join(&package).join(NODE_MODULES);
+        fs_sync::create_dir_all(&cache_nm).map_err(CommandError::FailedToCreateFile)?;
         for dep in &dependencies {
             if !crate::util::is_safe_path_component(dep) {
                 continue;
             }
             let (dep_name, _) = Versions::parse_raw_package_details(dep.clone());
-            let dep_src = format!("{}/{}/package", *CACHE_DIRECTORY, dep);
-            let dep_dest = format!("{}/{}", cache_nm, dep_name);
-            if let Some(parent) = std::path::Path::new(&dep_dest).parent() {
-                fs_sync::create_dir_all(parent).expect("Failed to create scope dir");
+            let dep_src = cache_root.join(dep).join("package");
+            let dep_dest = cache_nm.join(&dep_name);
+            if let Some(parent) = dep_dest.parent() {
+                fs_sync::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;
             }
             match crate::util::create_dir_link(&dep_src, &dep_dest) {
                 Ok(_) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(e) => panic!("{}", e),
+                Err(e) => return Err(CommandError::FailedToCreateFile(e)),
             }
         }
 
         // Link the package itself and all deps into the project's node_modules (flat hoisting).
-        let mut all_links = dependencies.clone();
-        all_links.push(package.clone());
+        let mut all_links = dependencies;
+        all_links.push(package);
 
         for entry in all_links {
             if !crate::util::is_safe_path_component(&entry) {
@@ -226,17 +239,19 @@ impl Cache {
             }
             let (package_name, _) = Versions::parse_raw_package_details(entry.to_string());
 
-            let src = format!("{}/{}/package", *CACHE_DIRECTORY, entry);
-            let dest = format!("./node_modules/{}", package_name);
+            let src = cache_root.join(&entry).join("package");
+            let dest = PathBuf::from(NODE_MODULES).join(&package_name);
 
-            if let Some(parent) = std::path::Path::new(&dest).parent() {
-                fs_sync::create_dir_all(parent).expect("Failed to create scope dir");
+            if let Some(parent) = dest.parent() {
+                fs_sync::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;
             }
             match crate::util::create_dir_link(&src, &dest) {
                 Ok(_) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(e) => panic!("{}", e),
+                Err(e) => return Err(CommandError::FailedToCreateFile(e)),
             }
         }
+
+        Ok(())
     }
 }

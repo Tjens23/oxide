@@ -64,21 +64,14 @@ impl CommandHandler for PackHandler {
             version
         );
 
-        let out_dir = self
-            .out_dir
-            .clone()
-            .unwrap_or_else(|| cwd.clone());
+        let out_dir = self.out_dir.clone().unwrap_or_else(|| cwd.clone());
 
         std::fs::create_dir_all(&out_dir).map_err(CommandError::FailedToCreateFile)?;
 
         let dest = out_dir.join(&filename);
         std::fs::write(&dest, &tarball).map_err(CommandError::FailedToWriteFile)?;
 
-        println!(
-            "Created {} ({} bytes)",
-            dest.display(),
-            tarball.len()
-        );
+        println!("Created {} ({} bytes)", dest.display(), tarball.len());
 
         Ok(())
     }

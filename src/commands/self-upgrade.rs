@@ -1,4 +1,3 @@
-
 use async_trait::async_trait;
 use serde::Deserialize;
 
@@ -6,8 +5,7 @@ use crate::errors::{CommandError, ParseError};
 
 use super::command_handler::CommandHandler;
 
-const GITHUB_API_LATEST: &str =
-    "https://api.github.com/repos/tjens23/oxide/releases/latest";
+const GITHUB_API_LATEST: &str = "https://api.github.com/repos/tjens23/oxide/releases/latest";
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -55,10 +53,7 @@ impl CommandHandler for SelfUpgradeHandler {
             return Ok(());
         }
 
-        println!(
-            "Upgrading oxide: v{} → {} …",
-            CURRENT_VERSION, latest_tag
-        );
+        println!("Upgrading oxide: v{} → {} …", CURRENT_VERSION, latest_tag);
 
         let binary_name = if cfg!(target_os = "windows") {
             "oxide-windows.exe"
@@ -91,7 +86,8 @@ impl CommandHandler for SelfUpgradeHandler {
                 status: status.as_u16(),
                 body: format!(
                     "failed to download {} (HTTP {})",
-                    binary_name, status.as_u16()
+                    binary_name,
+                    status.as_u16()
                 ),
             });
         }
@@ -108,20 +104,17 @@ impl CommandHandler for SelfUpgradeHandler {
             )));
         }
 
-        let current_exe =
-            std::env::current_exe().map_err(CommandError::FailedToWriteFile)?;
+        let current_exe = std::env::current_exe().map_err(CommandError::FailedToWriteFile)?;
 
         #[cfg(windows)]
         {
-
             let new_path = current_exe.with_extension("new");
             let old_path = current_exe.with_extension("old");
 
             if let Err(e) = std::fs::write(&new_path, &bytes) {
                 return Err(CommandError::FailedToWriteFile(e));
             }
-            std::fs::rename(&current_exe, &old_path)
-                .map_err(CommandError::FailedToWriteFile)?;
+            std::fs::rename(&current_exe, &old_path).map_err(CommandError::FailedToWriteFile)?;
             if let Err(e) = std::fs::rename(&new_path, &current_exe) {
                 let _ = std::fs::rename(&old_path, &current_exe);
                 let _ = std::fs::remove_file(&new_path);
@@ -136,14 +129,10 @@ impl CommandHandler for SelfUpgradeHandler {
             std::fs::write(&temp_path, &bytes).map_err(CommandError::FailedToWriteFile)?;
             {
                 use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(
-                    &temp_path,
-                    std::fs::Permissions::from_mode(0o755),
-                )
-                .map_err(CommandError::FailedToWriteFile)?;
+                std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o755))
+                    .map_err(CommandError::FailedToWriteFile)?;
             }
-            std::fs::rename(&temp_path, &current_exe)
-                .map_err(CommandError::FailedToWriteFile)?;
+            std::fs::rename(&temp_path, &current_exe).map_err(CommandError::FailedToWriteFile)?;
         }
 
         println!("oxide upgraded to {} successfully.", latest_tag);

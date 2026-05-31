@@ -6,25 +6,25 @@ use crate::errors::{
     ParseError::{self, CommandNotFound},
 };
 
+use super::dlx::DlxHandler;
+use super::doctor::DoctorHandler;
 use super::exec::ExecHandler;
+use super::foreach::ForeachHandler;
 use super::init::InitHandler;
-use super::run::RunHandler;
 use super::install::InstallHandler;
 use super::link::LinkHandler;
+use super::ls::LsHandler;
+use super::outdated::OutdatedHandler;
+use super::pack::PackHandler;
 use super::publish::PublishHandler;
+use super::run::RunHandler;
 use super::self_upgrade::SelfUpgradeHandler;
 use super::uninstall::UninstallHandler;
 use super::unlink::UnlinkHandler;
 use super::upgrade::UpgradeHandler;
 use super::version::VersionHandler;
-use super::outdated::OutdatedHandler;
 use super::why::WhyHandler;
-use super::ls::LsHandler;
-use super::pack::PackHandler;
-use super::doctor::DoctorHandler;
-use super::dlx::DlxHandler;
 use super::workspaces::WorkspacesHandler;
-use super::foreach::ForeachHandler;
 
 #[async_trait]
 pub trait CommandHandler {
@@ -33,31 +33,43 @@ pub trait CommandHandler {
 }
 
 pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
-    args.next(); 
+    args.next();
 
     let command = match args.next() {
         Some(command) => command,
         None => {
-           for (name, description) in [
+            for (name, description) in [
                 ("install", "Install a package"),
                 ("uninstall", "Uninstall a package"),
                 ("upgrade", "Upgrade a package"),
                 ("self-upgrade", "Upgrade the oxide tool itself"),
                 ("exec", "Execute a binary from node_modules/.bin"),
                 ("run", "Run a defined package script"),
-                ("version", "Bump package.json version, commit, and create a git tag"),
-                ("init", "Initialize a new project with a package.json"),                
+                (
+                    "version",
+                    "Bump package.json version, commit, and create a git tag",
+                ),
+                ("init", "Initialize a new project with a package.json"),
                 ("link", "Link a package globally or into node_modules"),
-                ("unlink", "Remove a linked package"),                
+                ("unlink", "Remove a linked package"),
                 ("publish", "Publish a package to the npm registry"),
-                ("login", "Authenticate with the npm registry to allow installing private packages"),
+                (
+                    "login",
+                    "Authenticate with the npm registry to allow installing private packages",
+                ),
                 ("outdated", "List dependencies with available updates"),
                 ("why", "Explain why a package is installed"),
                 ("ls", "List installed packages"),
                 ("pack", "Create a publishable .tgz tarball locally"),
                 ("doctor", "Check project health and environment"),
-                ("dlx", "Fetch and run a package binary without installing it"),
-                ("workspaces", "List workspace packages defined in this monorepo"),
+                (
+                    "dlx",
+                    "Fetch and run a package binary without installing it",
+                ),
+                (
+                    "workspaces",
+                    "List workspace packages defined in this monorepo",
+                ),
                 ("foreach", "Run a script across workspace packages"),
             ] {
                 println!("  {:<12} {}", name, description);

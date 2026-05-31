@@ -92,15 +92,16 @@ impl Versions {
         }
 
         // Strip leading `v` or `V` (e.g. "v1.0.0")
-        let v = v.strip_prefix('v').or_else(|| v.strip_prefix('V')).unwrap_or(v);
+        let v = v
+            .strip_prefix('v')
+            .or_else(|| v.strip_prefix('V'))
+            .unwrap_or(v);
 
         // Drop any trailing junk after a space that looks like a secondary bound
         // e.g. ">=1.0.0 <2.0.0" is valid, but some packages emit ">=1.0.0 <2" etc.
         // semver's VersionReq handles space-separated bounds natively; just normalise
         // npm x-ranges.
-        let normalized = v
-            .replace(".x", ".*")
-            .replace(".X", ".*");
+        let normalized = v.replace(".x", ".*").replace(".X", ".*");
 
         VersionReq::parse(&normalized).map_err(ParseError::InvalidVersionNotation)
     }
@@ -112,9 +113,7 @@ impl Versions {
     pub fn resolve_full_version(semantic_version: Option<&VersionReq>) -> Option<String> {
         match semantic_version {
             None => Some(LATEST.to_string()),
-            Some(req)
-                if req.comparators.len() == 1 && req.comparators[0].op == Op::Exact =>
-            {
+            Some(req) if req.comparators.len() == 1 && req.comparators[0].op == Op::Exact => {
                 let comp = &req.comparators[0];
                 let minor = comp.minor.unwrap_or(0);
                 let patch = comp.patch.unwrap_or(0);

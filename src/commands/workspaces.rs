@@ -1,7 +1,9 @@
-
 use async_trait::async_trait;
 
-use crate::{errors::{CommandError, ParseError}, workspace};
+use crate::{
+    errors::{CommandError, ParseError},
+    workspace,
+};
 
 use super::command_handler::CommandHandler;
 

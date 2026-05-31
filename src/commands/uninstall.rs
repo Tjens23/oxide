@@ -1,4 +1,3 @@
-
 use async_trait::async_trait;
 use serde_json::Value;
 
@@ -13,15 +12,12 @@ pub struct UninstallHandler {
 
 impl UninstallHandler {
     fn remove_from_package_json(package_name: &str) -> Result<(), CommandError> {
-        let content = std::fs::read_to_string("./package.json")
-            .map_err(CommandError::FailedToWriteFile)?;
+        let content =
+            std::fs::read_to_string("./package.json").map_err(CommandError::FailedToWriteFile)?;
         let mut json: Value =
             serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
 
-        if let Some(deps) = json
-            .get_mut("dependencies")
-            .and_then(|d| d.as_object_mut())
-        {
+        if let Some(deps) = json.get_mut("dependencies").and_then(|d| d.as_object_mut()) {
             deps.remove(package_name);
         }
 

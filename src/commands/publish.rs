@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use flate2::{write::GzEncoder, Compression};
-use serde_json::{json, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use flate2::{Compression, write::GzEncoder};
+use serde_json::{Value, json};
 use sha1::Digest as _;
 
 use crate::{
+    constants::{NODE_MODULES, PACKAGE_JSON},
     errors::{CommandError, ParseError},
     http::REGISTRY_URL,
 };
@@ -17,7 +18,7 @@ use super::command_handler::CommandHandler;
 use super::login::load_token;
 
 const ALWAYS_IGNORE: &[&str] = &[
-    "node_modules",
+    NODE_MODULES,
     ".git",
     ".hg",
     ".svn",
@@ -32,7 +33,11 @@ pub(crate) fn read_ignore_patterns(dir: &Path) -> Vec<String> {
     let npmignore = dir.join(".npmignore");
     let gitignore = dir.join(".gitignore");
 
-    let file = if npmignore.exists() { npmignore } else { gitignore };
+    let file = if npmignore.exists() {
+        npmignore
+    } else {
+        gitignore
+    };
 
     std::fs::read_to_string(file)
         .unwrap_or_default()
@@ -59,7 +64,10 @@ pub(crate) fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
     false
 }
 
-pub(crate) fn collect_files(dir: &Path, user_patterns: &[String]) -> Result<Vec<PathBuf>, CommandError> {
+pub(crate) fn collect_files(
+    dir: &Path,
+    user_patterns: &[String],
+) -> Result<Vec<PathBuf>, CommandError> {
     let mut files = Vec::new();
     collect_recursive(dir, dir, user_patterns, &mut files)?;
     Ok(files)
@@ -117,7 +125,6 @@ pub(crate) fn pack(dir: &Path) -> Result<Vec<u8>, CommandError> {
     gz.finish().map_err(CommandError::ExtractionFailed)
 }
 
-
 fn shasum_hex(data: &[u8]) -> String {
     let digest = sha1::Sha1::digest(data);
     digest.iter().map(|b| format!("{:02x}", b)).collect()
@@ -127,7 +134,6 @@ fn integrity_sha512(data: &[u8]) -> String {
     let digest = sha2::Sha512::digest(data);
     format!("sha512-{}", BASE64.encode(digest.as_slice()))
 }
-
 
 async fn publish_tarball(
     client: &reqwest::Client,
@@ -139,18 +145,27 @@ async fn publish_tarball(
     otp: Option<&str>,
     dry_run: bool,
 ) -> Result<(), CommandError> {
-    let name = pkg_json["name"]
-        .as_str()
-        .ok_or_else(|| CommandError::FailedToWriteFile(std::io::Error::other("missing \"name\" in package.json")))?;
-    let version = pkg_json["version"]
-        .as_str()
-        .ok_or_else(|| CommandError::FailedToWriteFile(std::io::Error::other("missing \"version\" in package.json")))?;
+    let name = pkg_json["name"].as_str().ok_or_else(|| {
+        CommandError::FailedToWriteFile(std::io::Error::other("missing \"name\" in package.json"))
+    })?;
+    let version = pkg_json["version"].as_str().ok_or_else(|| {
+        CommandError::FailedToWriteFile(std::io::Error::other(
+            "missing \"version\" in package.json",
+        ))
+    })?;
 
-    let filename = format!("{}-{}.tgz", name.replace('/', "-").trim_start_matches('-'), version);
+    let filename = format!(
+        "{}-{}.tgz",
+        name.replace('/', "-").trim_start_matches('-'),
+        version
+    );
     let shasum = shasum_hex(&tarball);
     let integrity = integrity_sha512(&tarball);
     let name_encoded = name.replace('/', "%2F");
-    let tarball_url = format!("{}/{}-/{}/-/{}", REGISTRY_URL, name_encoded, name_encoded, filename);
+    let tarball_url = format!(
+        "{}/{}-/{}/-/{}",
+        REGISTRY_URL, name_encoded, name_encoded, filename
+    );
     let tarball_len = tarball.len();
     let tarball_b64 = BASE64.encode(&tarball);
 
@@ -184,7 +199,10 @@ async fn publish_tarball(
 
     if dry_run {
         println!("[dry-run] Would PUT {}/{}", REGISTRY_URL, name);
-        println!("[dry-run] Tarball size: {} bytes, shasum: {}", tarball_len, shasum);
+        println!(
+            "[dry-run] Tarball size: {} bytes, shasum: {}",
+            tarball_len, shasum
+        );
         return Ok(());
     }
 
@@ -210,7 +228,10 @@ async fn publish_tarball(
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
         let is_otp = www_auth.contains("otp") || resp.headers().get("x-npm-otp").is_some();
-        let resp_body = resp.text().await.map_err(CommandError::FailedResponseText)?;
+        let resp_body = resp
+            .text()
+            .await
+            .map_err(CommandError::FailedResponseText)?;
         let body_wants_otp = resp_body.contains("one-time pass") || resp_body.contains("otp");
         if is_otp || body_wants_otp {
             return Err(CommandError::LoginFailed {
@@ -218,10 +239,16 @@ async fn publish_tarball(
                 body: "registry requires a one-time password — re-run with: oxide publish --otp <code>".into(),
             });
         }
-        return Err(CommandError::LoginFailed { status: status.as_u16(), body: resp_body });
+        return Err(CommandError::LoginFailed {
+            status: status.as_u16(),
+            body: resp_body,
+        });
     }
 
-    let resp_body = resp.text().await.map_err(CommandError::FailedResponseText)?;
+    let resp_body = resp
+        .text()
+        .await
+        .map_err(CommandError::FailedResponseText)?;
 
     if !status.is_success() {
         return Err(CommandError::LoginFailed {
@@ -233,7 +260,6 @@ async fn publish_tarball(
     println!("+ {}@{}", name, version);
     Ok(())
 }
-
 
 #[derive(Default)]
 pub struct PublishHandler {
@@ -250,22 +276,21 @@ impl CommandHandler for PublishHandler {
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--tag" => {
-                    self.tag = Some(
-                        args.next()
-                            .ok_or_else(|| ParseError::MissingArgument("--tag <tag>".to_string()))?,
-                    );
+                    self.tag =
+                        Some(args.next().ok_or_else(|| {
+                            ParseError::MissingArgument("--tag <tag>".to_string())
+                        })?);
                 }
                 "--access" => {
-                    self.access = Some(
-                        args.next()
-                            .ok_or_else(|| ParseError::MissingArgument("--access <public|restricted>".to_string()))?,
-                    );
+                    self.access = Some(args.next().ok_or_else(|| {
+                        ParseError::MissingArgument("--access <public|restricted>".to_string())
+                    })?);
                 }
                 "--otp" => {
-                    self.otp = Some(
-                        args.next()
-                            .ok_or_else(|| ParseError::MissingArgument("--otp <code>".to_string()))?,
-                    );
+                    self.otp =
+                        Some(args.next().ok_or_else(|| {
+                            ParseError::MissingArgument("--otp <code>".to_string())
+                        })?);
                 }
                 "--dry-run" => self.dry_run = true,
                 other if !other.starts_with('-') => self.dir = Some(other.to_string()),
@@ -284,9 +309,10 @@ impl CommandHandler for PublishHandler {
 
         let dir = std::fs::canonicalize(&dir).map_err(CommandError::FailedToWriteFile)?;
 
-        let pkg_raw = std::fs::read_to_string(dir.join("package.json"))
+        let pkg_raw = std::fs::read_to_string(dir.join(PACKAGE_JSON))
             .map_err(CommandError::FailedToWriteFile)?;
-        let pkg_json: Value = serde_json::from_str(&pkg_raw).map_err(CommandError::ParsingFailed)?;
+        let pkg_json: Value =
+            serde_json::from_str(&pkg_raw).map_err(CommandError::ParsingFailed)?;
 
         if pkg_json["name"].as_str().is_none() {
             return Err(CommandError::FailedToWriteFile(std::io::Error::other(

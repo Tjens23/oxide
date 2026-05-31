@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -8,7 +9,8 @@ use semver::VersionReq;
 use serde_json::Value;
 
 use crate::{
-    cache::{Cache, CACHE_DIRECTORY},
+    cache::{CACHE_DIRECTORY, Cache},
+    constants::OXIDE_LOCK,
     errors::{CommandError, ParseError},
     installer::{InstallContext, Installer, PackageInfo},
     util::TaskAllocator,
@@ -37,24 +39,31 @@ impl InstallHandler {
 
 impl InstallHandler {
     fn update_package_json(package_name: &str, version: &str) -> Result<(), CommandError> {
-        let content = std::fs::read_to_string("./package.json").unwrap_or_else(|_| "{}".to_string());
-        let mut json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
+        let content =
+            std::fs::read_to_string("./package.json").unwrap_or_else(|_| "{}".to_string());
+        let mut json: Value =
+            serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
 
         let deps = json
             .as_object_mut()
-            .ok_or_else(|| CommandError::ParsingFailed(serde_json::from_str::<Value>("null").unwrap_err()))?
+            .ok_or_else(|| {
+                CommandError::ParsingFailed(serde_json::from_str::<Value>("null").unwrap_err())
+            })?
             .entry("dependencies")
             .or_insert(Value::Object(serde_json::Map::new()));
 
         if let Some(map) = deps.as_object_mut() {
-            map.insert(package_name.to_string(), Value::String(format!("^{}", version)));
+            map.insert(
+                package_name.to_string(),
+                Value::String(format!("^{}", version)),
+            );
         }
 
-        let output = serde_json::to_string_pretty(&json).map_err(CommandError::FailedToSerializePackageLock)?;
+        let output = serde_json::to_string_pretty(&json)
+            .map_err(CommandError::FailedToSerializePackageLock)?;
         std::fs::write("./package.json", output).map_err(CommandError::FailedToWriteFile)?;
         Ok(())
     }
-
 }
 
 #[async_trait]
@@ -66,10 +75,9 @@ impl CommandHandler for InstallHandler {
         while i < rest.len() {
             match rest[i].as_str() {
                 "--filter" | "-F" => {
-                    let pat = rest
-                        .get(i + 1)
-                        .cloned()
-                        .ok_or_else(|| ParseError::MissingArgument("--filter <pattern>".to_string()))?;
+                    let pat = rest.get(i + 1).cloned().ok_or_else(|| {
+                        ParseError::MissingArgument("--filter <pattern>".to_string())
+                    })?;
                     self.filter = Some(pat);
                     rest.remove(i);
                     rest.remove(i);
@@ -105,8 +113,7 @@ impl CommandHandler for InstallHandler {
 
             for pkg in &matched {
                 println!("\n[{}] installing '{}'..", pkg.name, self.package_name);
-                std::env::set_current_dir(&pkg.path)
-                    .map_err(CommandError::FailedToWriteFile)?;
+                std::env::set_current_dir(&pkg.path).map_err(CommandError::FailedToWriteFile)?;
                 Box::pin(self.execute_single()).await?;
             }
 
@@ -120,8 +127,8 @@ impl CommandHandler for InstallHandler {
 
 impl InstallHandler {
     async fn install_from_package_json(&self) -> Result<(), CommandError> {
-        let content = std::fs::read_to_string("./package.json")
-            .map_err(CommandError::FailedToReadFile)?;
+        let content =
+            std::fs::read_to_string("./package.json").map_err(CommandError::FailedToReadFile)?;
         let json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
 
         let deps = json
@@ -184,10 +191,10 @@ impl InstallHandler {
                 )));
             }
             let stringified = Versions::stringify(&self.package_name, &version);
-            let lockfile_path = format!(
-                "{}/{}/package/oxide-lock.json",
-                *CACHE_DIRECTORY, stringified
-            );
+            let lockfile_path = PathBuf::from(CACHE_DIRECTORY.as_str())
+                .join(&stringified)
+                .join("package")
+                .join(OXIDE_LOCK);
             let lockfile_complete = std::fs::read_to_string(&lockfile_path)
                 .ok()
                 .and_then(|raw| serde_json::from_str::<crate::types::PackageLock>(&raw).ok())
@@ -195,7 +202,7 @@ impl InstallHandler {
                 .unwrap_or(false);
 
             if lockfile_complete {
-                Cache::load_cached_version(stringified);
+                Cache::load_cached_version(stringified)?;
                 Self::update_package_json(&self.package_name, &version)?;
                 println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
                 return Ok(());
@@ -246,7 +253,7 @@ impl InstallHandler {
 
         Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
         Installer::write_project_lockfile(dependency_map_mux)?;
-        Cache::load_cached_version(stringified);
+        Cache::load_cached_version(stringified)?;
         Self::update_package_json(&resolved_name, &resolved_version)?;
 
         println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());

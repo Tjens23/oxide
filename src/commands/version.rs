@@ -4,7 +4,10 @@ use std::process::Command;
 use async_trait::async_trait;
 use semver::Version;
 
-use crate::errors::{CommandError, ParseError};
+use crate::{
+    constants::PACKAGE_JSON,
+    errors::{CommandError, ParseError},
+};
 
 use super::command_handler::CommandHandler;
 
@@ -16,15 +19,14 @@ pub struct VersionHandler {
 #[async_trait]
 impl CommandHandler for VersionHandler {
     fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
-        self.bump = args.next().ok_or(ParseError::MissingArgument(
-            String::from("version bump (major|minor|patch) or explicit semver"),
-        ))?;
+        self.bump = args.next().ok_or(ParseError::MissingArgument(String::from(
+            "version bump (major|minor|patch) or explicit semver",
+        )))?;
         Ok(())
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
-        let pkg_raw =
-            fs::read_to_string("package.json").map_err(CommandError::FailedToReadFile)?;
+        let pkg_raw = fs::read_to_string(PACKAGE_JSON).map_err(CommandError::FailedToReadFile)?;
         let mut pkg: serde_json::Value =
             serde_json::from_str(&pkg_raw).map_err(CommandError::ParsingFailed)?;
 
@@ -49,8 +51,7 @@ impl CommandHandler for VersionHandler {
                 version.patch += 1;
             }
             explicit => {
-                version =
-                    Version::parse(explicit).map_err(|_| CommandError::InvalidVersion)?;
+                version = Version::parse(explicit).map_err(|_| CommandError::InvalidVersion)?;
             }
         }
 
@@ -60,13 +61,13 @@ impl CommandHandler for VersionHandler {
         pkg["version"] = serde_json::Value::String(new_version.clone());
         let updated = serde_json::to_string_pretty(&pkg)
             .map_err(CommandError::FailedToSerializePackageLock)?;
-        fs::write("package.json", updated).map_err(CommandError::FailedToWriteFile)?;
+        fs::write(PACKAGE_JSON, updated).map_err(CommandError::FailedToWriteFile)?;
 
-        println!("Updated package.json → {}", new_version);
+        println!("Updated {} → {}", PACKAGE_JSON, new_version);
 
         // Stage package.json
         let status = Command::new("git")
-            .args(["add", "package.json"])
+            .args(["add", PACKAGE_JSON])
             .status()
             .map_err(|e| CommandError::GitFailed(format!("failed to run git add: {e}")))?;
         if !status.success() {

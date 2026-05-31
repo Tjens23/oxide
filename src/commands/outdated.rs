@@ -1,4 +1,3 @@
-
 use async_trait::async_trait;
 use serde_json::Value;
 use tokio::task::JoinHandle;
@@ -24,10 +23,9 @@ impl CommandHandler for OutdatedHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
-        let content = std::fs::read_to_string("./package.json")
-            .map_err(CommandError::FailedToReadFile)?;
-        let json: Value =
-            serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
+        let content =
+            std::fs::read_to_string("./package.json").map_err(CommandError::FailedToReadFile)?;
+        let json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
 
         let mut dep_names: Vec<String> = Vec::new();
         for key in ["dependencies", "devDependencies"] {
@@ -56,7 +54,11 @@ impl CommandHandler for OutdatedHandler {
                             let latest = data.version;
                             let is_outdated = current.as_deref() != Some(latest.as_str());
                             if is_outdated {
-                                Some(PackageStatus { name, current, latest })
+                                Some(PackageStatus {
+                                    name,
+                                    current,
+                                    latest,
+                                })
                             } else {
                                 None
                             }

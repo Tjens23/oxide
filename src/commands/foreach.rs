@@ -1,8 +1,8 @@
-
 use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::{
+    constants::PACKAGE_JSON,
     errors::{CommandError, ParseError},
     workspace,
 };
@@ -26,10 +26,9 @@ impl CommandHandler for ForeachHandler {
         while i < rest.len() {
             match rest[i].as_str() {
                 "--filter" | "-F" => {
-                    let pat = rest
-                        .get(i + 1)
-                        .cloned()
-                        .ok_or_else(|| ParseError::MissingArgument("--filter <pattern>".to_string()))?;
+                    let pat = rest.get(i + 1).cloned().ok_or_else(|| {
+                        ParseError::MissingArgument("--filter <pattern>".to_string())
+                    })?;
                     self.filter = Some(pat);
                     rest.remove(i);
                     rest.remove(i);
@@ -76,7 +75,10 @@ impl CommandHandler for ForeachHandler {
 
         if matched.is_empty() {
             if self.filter.is_some() {
-                println!("No workspace packages matched filter '{}'.", self.filter.as_deref().unwrap_or(""));
+                println!(
+                    "No workspace packages matched filter '{}'.",
+                    self.filter.as_deref().unwrap_or("")
+                );
             } else {
                 println!("No workspace packages found.");
             }
@@ -87,7 +89,7 @@ impl CommandHandler for ForeachHandler {
         let mut failures = 0usize;
 
         for pkg in &matched {
-            let pkg_json_raw = std::fs::read_to_string(pkg.path.join("package.json"))
+            let pkg_json_raw = std::fs::read_to_string(pkg.path.join(PACKAGE_JSON))
                 .map_err(CommandError::FailedToReadFile)?;
             let pkg_json: Value =
                 serde_json::from_str(&pkg_json_raw).map_err(CommandError::ParsingFailed)?;

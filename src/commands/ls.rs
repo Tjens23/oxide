@@ -1,4 +1,3 @@
-
 use async_trait::async_trait;
 use serde_json::Value;
 
@@ -13,7 +12,7 @@ pub struct LsHandler {
 
 struct InstalledPkg {
     name: String,
-    wanted: String,  // version constraint from package.json
+    wanted: String,            // version constraint from package.json
     installed: Option<String>, // actual version in node_modules
 }
 
@@ -30,8 +29,8 @@ impl CommandHandler for LsHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
-        let raw = std::fs::read_to_string("./package.json")
-            .map_err(CommandError::FailedToReadFile)?;
+        let raw =
+            std::fs::read_to_string("./package.json").map_err(CommandError::FailedToReadFile)?;
         let json: Value = serde_json::from_str(&raw).map_err(CommandError::ParsingFailed)?;
 
         let project_name = json
@@ -72,7 +71,10 @@ impl CommandHandler for LsHandler {
         }
 
         if missing > 0 {
-            println!("\n{} package(s) missing — run `oxide install` to fix.", missing);
+            println!(
+                "\n{} package(s) missing — run `oxide install` to fix.",
+                missing
+            );
         }
 
         Ok(())

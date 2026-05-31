@@ -2,7 +2,10 @@ use std::process::Command;
 
 use async_trait::async_trait;
 
-use crate::errors::{CommandError, ParseError};
+use crate::{
+    constants::{BIN_DIR, NODE_MODULES},
+    errors::{CommandError, ParseError},
+};
 
 use super::command_handler::CommandHandler;
 
@@ -35,7 +38,7 @@ impl CommandHandler for ExecHandler {
         let bin = self.bin.as_deref().unwrap();
 
         let cwd = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
-        let local_bin = cwd.join("node_modules").join(".bin");
+        let local_bin = cwd.join(NODE_MODULES).join(BIN_DIR);
 
         let path_env = std::env::var("PATH").unwrap_or_default();
         let new_path = if local_bin.exists() {
@@ -61,9 +64,7 @@ impl CommandHandler for ExecHandler {
                     .env("PATH", &new_path)
                     .current_dir(&cwd)
                     .status()
-                    .map_err(|e| {
-                        CommandError::GitFailed(format!("failed to spawn shell: {e}"))
-                    })?
+                    .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?
             }
             #[cfg(not(windows))]
             {
@@ -76,9 +77,7 @@ impl CommandHandler for ExecHandler {
                     .env("PATH", &new_path)
                     .current_dir(&cwd)
                     .status()
-                    .map_err(|e| {
-                        CommandError::GitFailed(format!("failed to spawn shell: {e}"))
-                    })?
+                    .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?
             }
         } else {
             Command::new(bin)
@@ -86,9 +85,7 @@ impl CommandHandler for ExecHandler {
                 .env("PATH", &new_path)
                 .current_dir(&cwd)
                 .status()
-                .map_err(|e| {
-                    CommandError::GitFailed(format!("failed to spawn '{}': {}", bin, e))
-                })?
+                .map_err(|e| CommandError::GitFailed(format!("failed to spawn '{}': {}", bin, e)))?
         };
 
         if !status.success() {

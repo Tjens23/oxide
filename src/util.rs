@@ -1,16 +1,17 @@
+use crate::errors::CommandError;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use bytes::Bytes;
+use flate2::bufread::GzDecoder;
+use sha2::{Digest, Sha512};
 use std::{
     future::Future,
+    path::Path,
     sync::atomic::{AtomicUsize, Ordering},
     thread::{self},
     time::Duration,
 };
-use bytes::Bytes;
-use flate2::bufread::GzDecoder;
 use tar::Archive;
 use tokio::task::JoinHandle;
-use crate::errors::CommandError;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use sha2::{Digest, Sha512};
 
 pub fn verify_integrity(bytes: &Bytes, integrity: &str) -> bool {
     if let Some(encoded) = integrity.strip_prefix("sha512-") {
@@ -27,7 +28,7 @@ pub fn verify_shasum(bytes: &Bytes, expected_hex: &str) -> bool {
     hex == expected_hex
 }
 
-pub fn create_dir_link(src: &str, dest: &str) -> std::io::Result<()> {
+pub fn create_dir_link(src: &Path, dest: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
     {
         junction::create(src, dest)
@@ -56,14 +57,12 @@ pub fn is_safe_path_component(s: &str) -> bool {
     true
 }
 
-pub fn extract_tarball(bytes: Bytes, dest: String) -> Result<(), CommandError> {
+pub fn extract_tarball(bytes: Bytes, dest: &Path) -> Result<(), CommandError> {
     let bytes = &bytes.to_vec()[..];
     let gz = GzDecoder::new(bytes);
     let mut archive = Archive::new(gz);
 
-    archive
-        .unpack(&dest)
-        .map_err(CommandError::ExtractionFailed)
+    archive.unpack(dest).map_err(CommandError::ExtractionFailed)
 }
 
 pub fn extract_tarball_strip(bytes: Bytes, dest: &str) -> Result<(), CommandError> {

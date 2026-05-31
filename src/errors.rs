@@ -49,4 +49,6 @@ pub enum CommandError {
     GitFailed(String),
     #[error("failed to validate package integrity")]
     IntegrityCheckFailed,
+    #[error("internal error: mutex lock poisoned")]
+    MutexPoisoned,
 }

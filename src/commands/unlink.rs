@@ -45,7 +45,10 @@ fn unlink_package(pkg: &str) -> Result<(), CommandError> {
 
     if !is_link(&path) {
         return Err(CommandError::FailedToWriteFile(std::io::Error::other(
-            format!("'{}' is not a linked package; use `oxide uninstall` instead", pkg),
+            format!(
+                "'{}' is not a linked package; use `oxide uninstall` instead",
+                pkg
+            ),
         )));
     }
 
@@ -56,9 +59,7 @@ fn unlink_package(pkg: &str) -> Result<(), CommandError> {
 
 fn unlink_global(pkg: &str) -> Result<(), CommandError> {
     let global_nm = global_node_modules().ok_or_else(|| {
-        CommandError::FailedToWriteFile(std::io::Error::other(
-            "cannot determine data directory",
-        ))
+        CommandError::FailedToWriteFile(std::io::Error::other("cannot determine data directory"))
     })?;
 
     let path = global_nm.join(pkg);
@@ -92,12 +93,15 @@ impl CommandHandler for UnlinkHandler {
 
     async fn execute(&self) -> Result<(), CommandError> {
         if self.global {
-            let pkg = self.package_name.as_deref().ok_or_else(|| {
-                ParseError::MissingArgument("--global <package>".to_string())
-            });
+            let pkg = self
+                .package_name
+                .as_deref()
+                .ok_or_else(|| ParseError::MissingArgument("--global <package>".to_string()));
             return match pkg {
                 Ok(p) => unlink_global(p),
-                Err(e) => Err(CommandError::FailedToWriteFile(std::io::Error::other(e.to_string()))),
+                Err(e) => Err(CommandError::FailedToWriteFile(std::io::Error::other(
+                    e.to_string(),
+                ))),
             };
         }
 

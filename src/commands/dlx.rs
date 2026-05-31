@@ -92,8 +92,7 @@ impl CommandHandler for DlxHandler {
         }
 
         let pkg_dir = format!("{}/{}", modules_dir, package_name);
-        let bin_path =
-            resolve_binary(&pkg_dir, &package_name, self.binary_override.as_deref())?;
+        let bin_path = resolve_binary(&pkg_dir, &package_name, self.binary_override.as_deref())?;
 
         let cwd = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
 
@@ -107,9 +106,8 @@ impl CommandHandler for DlxHandler {
             std::env::var("PATH").unwrap_or_default()
         );
 
-        let is_js = bin_path.ends_with(".js")
-            || bin_path.ends_with(".cjs")
-            || bin_path.ends_with(".mjs");
+        let is_js =
+            bin_path.ends_with(".js") || bin_path.ends_with(".cjs") || bin_path.ends_with(".mjs");
 
         let mut cmd = if is_js {
             let interpreter = resolve_interpreter(&bin_path);
@@ -140,7 +138,6 @@ impl CommandHandler for DlxHandler {
         Ok(())
     }
 }
-
 
 /// Install `root_version_data` and its full transitive dep tree into a flat
 /// `{modules_dir}/{pkg_name}/` layout.  Node's module resolution walks up
@@ -218,8 +215,7 @@ async fn download_and_extract(
         return Ok(());
     }
 
-    let bytes =
-        HTTPRequest::get_bytes(client.clone(), version_data.dist.tarball.clone()).await?;
+    let bytes = HTTPRequest::get_bytes(client.clone(), version_data.dist.tarball.clone()).await?;
 
     if !version_data.dist.verify(&bytes) {
         eprintln!("'{}': integrity check failed, skipping", version_data.name);
@@ -244,9 +240,7 @@ fn enqueue_deps(
     }
 }
 
-fn read_pkg_json_deps(
-    pkg_dir: &str,
-) -> Option<std::collections::HashMap<String, String>> {
+fn read_pkg_json_deps(pkg_dir: &str) -> Option<std::collections::HashMap<String, String>> {
     let raw = std::fs::read_to_string(format!("{}/package.json", pkg_dir)).ok()?;
     let json: Value = serde_json::from_str(&raw).ok()?;
     let map = json.get("dependencies")?.as_object()?;
@@ -263,14 +257,10 @@ pub fn resolve_binary(
     binary_override: Option<&str>,
 ) -> Result<String, CommandError> {
     let pkg_json_path = format!("{}/package.json", package_dir);
-    let raw = std::fs::read_to_string(&pkg_json_path)
-        .map_err(CommandError::FailedToReadFile)?;
+    let raw = std::fs::read_to_string(&pkg_json_path).map_err(CommandError::FailedToReadFile)?;
     let json: Value = serde_json::from_str(&raw).map_err(CommandError::ParsingFailed)?;
 
-    let short_name = package_name
-        .split('/')
-        .last()
-        .unwrap_or(package_name);
+    let short_name = package_name.split('/').last().unwrap_or(package_name);
 
     match json.get("bin") {
         Some(Value::String(rel)) => {
@@ -301,18 +291,16 @@ pub fn resolve_binary(
 }
 
 pub fn resolve_interpreter(bin_path: &str) -> String {
-    if let Ok(file) = std::fs::File::open(bin_path) {
-        let mut reader = BufReader::new(file);
-        let mut first_line = String::new();
-        if reader.read_line(&mut first_line).is_ok() {
-            if let Some(interp) = parse_shebang(&first_line) {
-                return interp;
-            }
-        }
-    }
-    "node".to_string()
+    std::fs::File::open(bin_path)
+        .ok()
+        .and_then(|file| {
+            let mut reader = BufReader::new(file);
+            let mut first_line = String::new();
+            reader.read_line(&mut first_line).ok()?;
+            parse_shebang(&first_line)
+        })
+        .unwrap_or_else(|| "node".to_string())
 }
-
 
 pub fn parse_shebang(line: &str) -> Option<String> {
     let line = line.trim();
@@ -331,5 +319,3 @@ pub fn parse_shebang(line: &str) -> Option<String> {
     };
     prog.split('/').last().map(|s| s.to_string())
 }
-
-

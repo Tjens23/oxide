@@ -1,5 +1,6 @@
 mod cache;
 mod commands;
+mod constants;
 mod errors;
 mod http;
 mod installer;
@@ -19,16 +20,23 @@ use commands::command_handler;
 fn main() {
     init_keyring();
 
-    tokio::runtime::Builder::new_multi_thread()
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .expect("Failed to build Tokio runtime")
-        .block_on(async {
-            let parse_result = command_handler::handle_args(env::args()).await;
-            if let Err(err) = parse_result {
-                println!("Failed to parse command: {err}");
-            }
-        });
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("Fatal: could not start async runtime: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    runtime.block_on(async {
+        let parse_result = command_handler::handle_args(env::args()).await;
+        if let Err(err) = parse_result {
+            println!("Failed to parse command: {err}");
+        }
+    });
 }
 
 fn init_keyring() {

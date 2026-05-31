@@ -1,9 +1,11 @@
-
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::errors::{CommandError, ParseError};
-use crate::http::REGISTRY_URL;
+use crate::{
+    constants::{NODE_MODULES, PACKAGE_JSON},
+    errors::{CommandError, ParseError},
+    http::REGISTRY_URL,
+};
 
 use super::command_handler::CommandHandler;
 use super::login::load_token;
@@ -19,10 +21,18 @@ struct Check {
 
 impl Check {
     fn pass(label: &'static str, detail: impl Into<String>) -> Self {
-        Self { label, passed: true, detail: detail.into() }
+        Self {
+            label,
+            passed: true,
+            detail: detail.into(),
+        }
     }
     fn fail(label: &'static str, detail: impl Into<String>) -> Self {
-        Self { label, passed: false, detail: detail.into() }
+        Self {
+            label,
+            passed: false,
+            detail: detail.into(),
+        }
     }
 }
 
@@ -35,28 +45,28 @@ impl CommandHandler for DoctorHandler {
     async fn execute(&self) -> Result<(), CommandError> {
         let mut checks: Vec<Check> = Vec::new();
 
-        let pkg_json: Option<Value> = match std::fs::read_to_string("./package.json") {
+        let pkg_json: Option<Value> = match std::fs::read_to_string(PACKAGE_JSON) {
             Ok(raw) => match serde_json::from_str::<Value>(&raw) {
                 Ok(v) => {
-                    checks.push(Check::pass("package.json", "found and valid"));
+                    checks.push(Check::pass(PACKAGE_JSON, "found and valid"));
                     Some(v)
                 }
                 Err(e) => {
-                    checks.push(Check::fail("package.json", format!("invalid JSON — {}", e)));
+                    checks.push(Check::fail(PACKAGE_JSON, format!("invalid JSON — {}", e)));
                     None
                 }
             },
             Err(_) => {
-                checks.push(Check::fail("package.json", "not found in current directory"));
+                checks.push(Check::fail(PACKAGE_JSON, "not found in current directory"));
                 None
             }
         };
 
-        if std::path::Path::new("./node_modules").exists() {
-            checks.push(Check::pass("node_modules", "present"));
+        if std::path::Path::new(NODE_MODULES).exists() {
+            checks.push(Check::pass(NODE_MODULES, "present"));
         } else {
             checks.push(Check::fail(
-                "node_modules",
+                NODE_MODULES,
                 "missing — run `oxide install <package>` to install dependencies",
             ));
         }
@@ -82,7 +92,10 @@ impl CommandHandler for DoctorHandler {
 
         match client.get(REGISTRY_URL).send().await {
             Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 404 => {
-                checks.push(Check::pass("registry", format!("reachable ({})", REGISTRY_URL)));
+                checks.push(Check::pass(
+                    "registry",
+                    format!("reachable ({})", REGISTRY_URL),
+                ));
             }
             Ok(resp) => {
                 checks.push(Check::fail(
