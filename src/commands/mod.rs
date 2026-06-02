@@ -1,4 +1,5 @@
 pub mod command_handler;
+pub mod config;
 pub mod dlx;
 pub mod doctor;
 pub mod exec;

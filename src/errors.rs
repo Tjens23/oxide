@@ -51,4 +51,8 @@ pub enum CommandError {
     IntegrityCheckFailed,
     #[error("internal error: mutex lock poisoned")]
     MutexPoisoned,
+    #[error("unknown config key '{0}'; run 'oxide config list' to see valid keys")]
+    UnknownConfigKey(String),
+    #[error("failed to write config ({0})")]
+    ConfigWriteFailed(Error),
 }

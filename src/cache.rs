@@ -188,7 +188,10 @@ impl Cache {
         }
     }
 
-    pub fn load_cached_version(package: String) -> Result<(), CommandError> {
+    pub fn load_cached_version(
+        package: String,
+        dest_root: &std::path::Path,
+    ) -> Result<(), CommandError> {
         if !crate::util::is_safe_path_component(&package) {
             return Err(CommandError::GitFailed(format!(
                 "unsafe package path component: {}",
@@ -229,7 +232,7 @@ impl Cache {
             }
         }
 
-        // Link the package itself and all deps into the project's node_modules (flat hoisting).
+        // Link the package itself and all deps into dest_root (flat hoisting).
         let mut all_links = dependencies;
         all_links.push(package);
 
@@ -240,7 +243,7 @@ impl Cache {
             let (package_name, _) = Versions::parse_raw_package_details(entry.to_string());
 
             let src = cache_root.join(&entry).join("package");
-            let dest = PathBuf::from(NODE_MODULES).join(&package_name);
+            let dest = dest_root.join(&package_name);
 
             if let Some(parent) = dest.parent() {
                 fs_sync::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;

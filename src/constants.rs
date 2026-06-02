@@ -12,3 +12,12 @@ pub const BIN_DIR: &str = ".bin";
 
 /// Sub-directory inside the OS cache folder where oxide stores downloaded packages.
 pub const CACHE_SUBDIR: &str = "node-cache";
+
+/// Filename of the per-user oxide config file.
+pub const CONFIG_FILE: &str = "config.json";
+
+/// Sub-directory inside the oxide config folder for globally installed packages.
+pub const GLOBAL_MODULES_SUBDIR: &str = "global/node_modules";
+
+/// Sub-directory inside the oxide config folder where global binary symlinks are placed.
+pub const GLOBAL_BIN_SUBDIR: &str = "bin";

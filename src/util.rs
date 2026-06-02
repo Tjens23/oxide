@@ -39,9 +39,20 @@ pub fn create_dir_link(src: &Path, dest: &Path) -> std::io::Result<()> {
     }
 }
 
-/// Returns `true` if `s` is safe to use as a component in a cache or
-/// `node_modules` path.  Rejects traversal sequences (`..`), absolute
-/// paths, Windows drive prefixes, and null bytes.
+/// Create a file symlink. On Windows, requires Developer Mode or elevated
+/// privileges — callers should surface a helpful error when it fails.
+pub fn create_file_link(src: &Path, dest: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(src, dest)
+    }
+    #[cfg(not(windows))]
+    {
+        std::os::unix::fs::symlink(src, dest)
+    }
+}
+
+/// Returns `true` if `s` contains no path traversal, root, or drive-prefix components.
 pub fn is_safe_path_component(s: &str) -> bool {
     if s.is_empty() || s.contains('\0') {
         return false;

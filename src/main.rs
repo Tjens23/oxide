@@ -1,5 +1,6 @@
 mod cache;
 mod commands;
+mod config;
 mod constants;
 mod errors;
 mod http;

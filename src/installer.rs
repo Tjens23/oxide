@@ -261,7 +261,10 @@ impl Installer {
             .contains_key(stringified.as_str());
 
         if !in_dep_map {
-            if let Err(e) = Cache::load_cached_version(stringified) {
+            if let Err(e) = Cache::load_cached_version(
+                stringified,
+                std::path::Path::new(crate::constants::NODE_MODULES),
+            ) {
                 eprintln!("Warning: failed to load cached package: {e}");
             }
         }
