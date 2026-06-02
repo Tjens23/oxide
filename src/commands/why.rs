@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use colored::Colorize;
 use serde_json::Value;
 
 use crate::{
@@ -52,14 +53,14 @@ impl CommandHandler for WhyHandler {
         }
 
         if let Some(ref constraint) = in_deps {
-            println!("'{}' is a direct dependency  ({})", target, constraint);
+            println!("{}", format!("'{}' is a direct dependency  ({})", target, constraint).green());
         }
         if let Some(ref constraint) = in_dev_deps {
-            println!("'{}' is a dev dependency     ({})", target, constraint);
+            println!("{}", format!("'{}' is a dev dependency     ({})", target, constraint).cyan());
         }
 
         if let Some(ref ver) = installed_version {
-            println!("Installed version: {}", ver);
+            println!("{}", format!("Installed version: {}", ver).green());
         } else {
             println!("Not found in node_modules — run `oxide install`.");
         }

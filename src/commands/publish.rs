@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use colored::Colorize;
 use flate2::{Compression, write::GzEncoder};
 use serde_json::{Value, json};
 use sha1::Digest as _;
@@ -211,12 +212,13 @@ async fn publish_tarball(opts: PublishOptions<'_>) -> Result<(), CommandError> {
         body["access"] = json!(acc);
     }
 
-    println!("Publishing {}@{} with tag '{}'…", name, version, tag);
+    println!("Publishing {}@{} with tag '{}'…", name.bold(), version.bold(), tag.cyan());
 
     if dry_run {
-        println!("[dry-run] Would PUT {}/{}", REGISTRY_URL, name);
+        println!("{} Would PUT {}/{}", "[dry-run]".yellow(), REGISTRY_URL, name);
         println!(
-            "[dry-run] Tarball size: {} bytes, shasum: {}",
+            "{} Tarball size: {} bytes, shasum: {}",
+            "[dry-run]".yellow(),
             tarball_len, shasum
         );
         return Ok(());
@@ -273,7 +275,7 @@ async fn publish_tarball(opts: PublishOptions<'_>) -> Result<(), CommandError> {
         });
     }
 
-    println!("+ {}@{}", name, version);
+    println!("{}", format!("+ {}@{}", name, version).green().bold());
     Ok(())
 }
 
@@ -351,7 +353,7 @@ impl CommandHandler for PublishHandler {
             })?
         };
 
-        println!("Packing {}…", dir.display());
+        println!("{} {}…", "Packing".bold(), dir.display());
         let tarball = pack(&dir)?;
 
         let tag = self.tag.as_deref().unwrap_or("latest");

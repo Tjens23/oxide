@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use colored::Colorize;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -77,21 +78,21 @@ impl CommandHandler for OutdatedHandler {
         }
 
         if outdated.is_empty() {
-            println!("All packages are up to date.");
+            println!("{}", "All packages are up to date.".green());
             return Ok(());
         }
 
-        outdated.sort_by(|a, b| a.name.cmp(&b.name));
-
-        println!("{:<30} {:<15} Latest", "Package", "Current");
+        let pkg_pad = 30usize.saturating_sub("Package".len());
+        let cur_pad = 15usize.saturating_sub("Current".len());
+        println!("{}{} {}{} {}", "Package".bold(), " ".repeat(pkg_pad), "Current".bold(), " ".repeat(cur_pad), "Latest".bold());
         println!("{}", "-".repeat(60));
 
         for status in &outdated {
             let current = status.current.as_deref().unwrap_or("—");
-            println!("{:<30} {:<15} {}", status.name, current, status.latest);
+            println!("{:<30} {:<15} {}", status.name, current, status.latest.yellow());
         }
 
-        println!("\n{} package(s) outdated.", outdated.len());
+        println!("\n{}", format!("{} package(s) outdated.", outdated.len()).yellow());
 
         Ok(())
     }

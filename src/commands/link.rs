@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use colored::Colorize;
 use serde_json::Value;
 
 use crate::{
@@ -52,7 +53,11 @@ fn link_current_to_global() -> Result<(), CommandError> {
     let dest = global_nm.join(&name);
     create_link(&cwd, &dest)?;
 
-    println!("Linked '{}' → global node_modules", name);
+    println!(
+        "{} '{}' → global node_modules",
+        "Linked".green(),
+        name
+    );
     Ok(())
 }
 
@@ -70,7 +75,8 @@ fn link_dir_to_local(dir: &Path) -> Result<(), CommandError> {
     create_link(&abs, &dest)?;
 
     println!(
-        "Linked '{}': {} → ./node_modules/{}",
+        "{} '{}': {} → ./node_modules/{}",
+        "Linked".green(),
         name,
         abs.display(),
         name
@@ -97,7 +103,7 @@ fn link_global_to_local(pkg: &str) -> Result<(), CommandError> {
     let dest = Path::new("./node_modules").join(pkg);
     create_link(&src, &dest)?;
 
-    println!("Linked global '{}' → ./node_modules/{}", pkg, pkg);
+    println!("{} global '{}' → ./node_modules/{}", "Linked".green(), pkg, pkg);
     Ok(())
 }
 

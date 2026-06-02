@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use colored::Colorize;
 use serde_json::Value;
 
 use crate::errors::{CommandError, ParseError};
@@ -42,7 +43,7 @@ impl CommandHandler for LsHandler {
             .and_then(|v| v.as_str())
             .unwrap_or("0.0.0");
 
-        println!("{}@{}", project_name, project_version);
+        println!("{}", format!("{}@{}", project_name, project_version).bold());
 
         let mut deps = collect_deps(&json, "dependencies", false);
         if self.all {
@@ -61,10 +62,12 @@ impl CommandHandler for LsHandler {
             let is_last = i == total - 1;
             let branch = if is_last { "└──" } else { "├──" };
 
+            let branch_dim = branch.dimmed();
+
             match &pkg.installed {
-                Some(ver) => println!("  {} {}@{} (wanted {})", branch, pkg.name, ver, pkg.wanted),
+                Some(ver) => println!("  {} {}@{} (wanted {})", branch_dim, pkg.name, ver, pkg.wanted),
                 None => {
-                    println!("  {} {}@MISSING (wanted {})", branch, pkg.name, pkg.wanted);
+                    println!("  {} {}@{} (wanted {})", branch_dim, pkg.name, "MISSING".red(), pkg.wanted);
                     missing += 1;
                 }
             }
@@ -72,8 +75,8 @@ impl CommandHandler for LsHandler {
 
         if missing > 0 {
             println!(
-                "\n{} package(s) missing — run `oxide install` to fix.",
-                missing
+                "\n{}",
+                format!("{} package(s) missing — run `oxide install` to fix.", missing).yellow()
             );
         }
 

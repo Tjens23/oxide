@@ -4,6 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use colored::Colorize;
 use serde::Deserialize;
 use tokio::time::{Duration, sleep};
 
@@ -74,7 +75,7 @@ impl CommandHandler for LoginHandler {
         };
 
         save_token(&token)?;
-        println!("Logged in — token saved to OS credential store");
+        println!("{}", "Logged in — token saved to OS credential store".green().bold());
         Ok(())
     }
 }
@@ -106,8 +107,8 @@ async fn web_login(client: &reqwest::Client) -> Result<String, CommandError> {
 
     let init: WebLoginInit = serde_json::from_str(&body).map_err(CommandError::ParsingFailed)?;
 
-    println!("Login at:");
-    println!("{}", init.login_url);
+    println!("{}", "Login at:".bold());
+    println!("{}", init.login_url.cyan().bold());
     print!("Press ENTER to open in the browser...");
     io::stdout().flush().unwrap();
     io::stdin().lock().read_line(&mut String::new()).unwrap();
@@ -140,7 +141,7 @@ async fn web_login(client: &reqwest::Client) -> Result<String, CommandError> {
 
         let remaining = (MAX_POLL_ATTEMPTS - attempt) * 2;
         if attempt % PROGRESS_INTERVAL == 0 && remaining > 0 {
-            eprintln!("Still waiting for browser login… ({remaining}s remaining)");
+            eprintln!("{}", "Still waiting for browser login… ({remaining}s remaining)".dimmed());
         }
     }
 

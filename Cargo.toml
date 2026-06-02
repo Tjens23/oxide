@@ -1,6 +1,6 @@
 [package]
 name = "oxide"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 
 
@@ -9,26 +9,27 @@ async-trait = "0.1.89"
 base64 = "0.22"
 bytes = "1.11.1"
 clap = "4.6.1"
+colored = "3.1.1"
 dirs = "6.0.0"
 flate2 = "1.1.9"
 keyring-core = "1.0.0"
 lazy_static = "1.5.0"
-open = "5.3.2"
-reqwest = { version = "0.13.3", features = ["json"] }
-rpassword = "7.3.1"
+open = "5.3.5"
+reqwest = { version = "0.13.4", features = ["json"] }
+rpassword = "7.5.4"
 semver = "1.0.28"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
 symlink = "0.1.0"
-tar = "0.4.45"
+tar = "0.4.46"
 thiserror = "2.0.18"
-tokio = {version = "1.52.2", features = ["rt-multi-thread", "macros", "fs", "time"]}
+tokio = {version = "1.52.3", features = ["rt-multi-thread", "macros", "fs", "time"]}
 
 [target.'cfg(windows)'.dependencies]
 junction = "2.0.0"
-windows-native-keyring-store = "1.0.0"
+windows-native-keyring-store = "1.1.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }

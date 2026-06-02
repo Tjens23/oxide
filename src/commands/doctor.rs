@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use colored::Colorize;
 use serde_json::Value;
 
 use crate::{
@@ -116,13 +117,19 @@ impl CommandHandler for DoctorHandler {
             )),
         }
 
-        println!("{:<20} {:<8} Detail", "Check", "Status");
+        println!("{}{} {}{} {}", "Check".bold(), " ".repeat(15), "Status".bold(), " ".repeat(2), "Detail".bold());
         println!("{}", "-".repeat(72));
 
         let mut failures = 0usize;
         for check in &checks {
-            let status = if check.passed { "pass" } else { "FAIL" };
-            println!("{:<20} {:<8} {}", check.label, status, check.detail);
+            let raw_status = if check.passed { "pass" } else { "FAIL" };
+            let colored_status = if check.passed {
+                raw_status.green().to_string()
+            } else {
+                raw_status.red().bold().to_string()
+            };
+            let pad = 8usize.saturating_sub(raw_status.len());
+            println!("{:<20} {}{} {}", check.label, colored_status, " ".repeat(pad), check.detail);
             if !check.passed {
                 failures += 1;
             }
@@ -130,9 +137,9 @@ impl CommandHandler for DoctorHandler {
 
         println!();
         if failures == 0 {
-            println!("All checks passed.");
+            println!("{}", "All checks passed.".green());
         } else {
-            println!("{} check(s) failed.", failures);
+            println!("{}", format!("{} check(s) failed.", failures).red());
         }
 
         Ok(())

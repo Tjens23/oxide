@@ -5,6 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use colored::Colorize;
 use semver::VersionReq;
 use serde_json::Value;
 
@@ -121,12 +122,12 @@ impl CommandHandler for InstallHandler {
             let matched = workspace::apply_filter(&packages, filter);
 
             if matched.is_empty() {
-                println!("No workspace packages matched filter '{}'.", filter);
+                println!("Installing '{}' — no packages matched filter '{}'.", self.package_name, filter);
                 return Ok(());
             }
 
             for pkg in &matched {
-                println!("\n[{}] installing '{}'..", pkg.name, self.package_name);
+                println!("\n{} installing '{}'..", format!("[{}]", pkg.name).bold(), self.package_name.bold());
                 std::env::set_current_dir(&pkg.path).map_err(CommandError::FailedToWriteFile)?;
                 Box::pin(self.execute_single()).await?;
             }
@@ -183,7 +184,7 @@ impl InstallHandler {
     }
 
     async fn execute_single(&self) -> Result<(), CommandError> {
-        println!("Installing '{}'..", self.package_name);
+        println!("Installing '{}' ..", self.package_name.bold());
 
         let started_at = std::time::Instant::now();
 
@@ -218,7 +219,7 @@ impl InstallHandler {
                 if !self.no_save {
                     Self::update_package_json(&self.package_name, &version, self.save_dev)?;
                 }
-                println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
+                println!("{}", format!("Done in {:.2}s", started_at.elapsed().as_secs_f64()).green().bold());
                 return Ok(());
             }
             // Lockfile missing or empty deps — fall through to fresh install
@@ -271,14 +272,14 @@ impl InstallHandler {
 
         self.note_ignore_scripts();
 
-        println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
+        println!("{}", format!("Done in {:.2}s", started_at.elapsed().as_secs_f64()).green().bold());
         Ok(())
     }
 
     fn note_ignore_scripts(&self) {
         let from_config = OxideConfig::load().is_true("ignore-scripts");
         if self.ignore_scripts || from_config {
-            println!("note: --ignore-scripts is set; lifecycle scripts will not run.");
+            println!("{} --ignore-scripts is set; lifecycle scripts will not run.", "note:".yellow());
         }
     }
 
@@ -301,7 +302,7 @@ impl InstallHandler {
     }
 
     async fn execute_global(&self) -> Result<(), CommandError> {
-        println!("Installing '{}' globally..", self.package_name);
+        println!("Installing '{}' globally ..", self.package_name.bold());
 
         let started_at = std::time::Instant::now();
         let client = reqwest::Client::new();
@@ -372,13 +373,11 @@ impl InstallHandler {
         Self::link_global_binaries(&package_dir, &global_bin, short_name);
 
         self.note_ignore_scripts();
-        println!(
-            "Installed '{}@{}' globally in {:.2}s",
-            resolved_name,
-            resolved_version,
-            started_at.elapsed().as_secs_f64()
+        println!("{}",
+            format!("Installed '{}@{}' globally in {:.2}s", resolved_name, resolved_version, started_at.elapsed().as_secs_f64())
+                .green().bold()
         );
-        println!("hint: make sure '{}' is in your PATH", global_bin.display());
+        println!("{} make sure '{}' is in your PATH", "hint:".yellow(), global_bin.display());
         Ok(())
     }
 
@@ -416,10 +415,11 @@ impl InstallHandler {
             let _ = std::fs::remove_file(dest);
         }
         match crate::util::create_file_link(src, dest) {
-            Ok(_) => println!("  linked binary '{}'", dest.display()),
+            Ok(_) => println!("  {} '{}'", "linked binary".green(), dest.display()),
             Err(e) => eprintln!(
-                "  warning: could not link binary '{}': {} \
+                "  {} could not link binary '{}': {} \
                  (on Windows, enable Developer Mode or run as administrator)",
+                "warning:".yellow(),
                 dest.display(),
                 e
             ),

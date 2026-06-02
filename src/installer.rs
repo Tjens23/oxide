@@ -7,6 +7,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use colored::Colorize;
+
 use crate::util::{self, TaskAllocator};
 use crate::{
     cache::{CACHE_DIRECTORY, Cache},
@@ -147,26 +149,26 @@ impl Installer {
                 {
                     Ok(bytes) => bytes,
                     Err(e) => {
-                        eprintln!("Failed to download '{}': {}", stringified, e);
+                        eprintln!("{} '{}': {}", "error:".red(), stringified, e);
                         return;
                     }
                 };
                 if !version_data.dist.verify(&package_bytes) {
-                    eprintln!("'{}': {}", stringified, CommandError::IntegrityCheckFailed);
+                    eprintln!("{} '{}': {}", "error:".red(), stringified, CommandError::IntegrityCheckFailed);
                     return;
                 }
                 let strf = stringified.clone();
                 TaskAllocator::add_blocking(move || {
                     match util::extract_tarball(package_bytes, &package_destination) {
-                        Ok(_) => println!("Installed '{}'", strf),
-                        Err(e) => eprintln!("Failed to extract '{}': {e}", strf),
+                        Ok(_) => println!("{} '{}'", "Installed".green().bold(), strf),
+                        Err(e) => eprintln!("{} '{}': {e}", "error:".red(), strf),
                     }
                 });
             }
 
             let dependencies = version_data.dependencies.unwrap_or_default();
             if let Err(e) = Self::install_dependencies(parents_mux, context, dependencies).await {
-                eprintln!("Warning: failed to install dependencies: {e}");
+                eprintln!("{} failed to install dependencies: {e}", "Warning:".yellow());
             }
         });
 
@@ -183,7 +185,8 @@ impl Installer {
                 Ok(req) => req,
                 Err(_) => {
                     eprintln!(
-                        "Warning: skipping '{}' — unparseable version '{}'",
+                        "{} skipping '{}' — unparseable version '{}'",
+                        "Warning:".yellow(),
                         name, version
                     );
                     continue;
@@ -197,7 +200,11 @@ impl Installer {
             let (is_cached, cached_version) = match Cache::exists(&name, full_version, req).await {
                 Ok(result) => result,
                 Err(e) => {
-                    eprintln!("Warning: failed to check cache for '{}': {}", name, e);
+                    eprintln!(
+                        "{} failed to check cache for '{}': {}",
+                        "Warning:".yellow(),
+                        name, e
+                    );
                     continue;
                 }
             };
@@ -218,7 +225,8 @@ impl Installer {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!(
-                        "Warning: failed to fetch version data for '{}': {}",
+                        "{} failed to fetch version data for '{}': {}",
+                        "Warning:".yellow(),
                         name, e
                     );
                     continue;
@@ -266,7 +274,7 @@ impl Installer {
                 std::path::Path::new(crate::constants::NODE_MODULES),
             )
         {
-            eprintln!("Warning: failed to load cached package: {e}");
+            eprintln!("{} failed to load cached package: {e}", "Warning:".yellow());
         }
 
         Ok(())

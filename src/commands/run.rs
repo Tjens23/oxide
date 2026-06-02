@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::process::Command;
 
 use async_trait::async_trait;
+use colored::Colorize;
 use serde::Deserialize;
 
 use crate::{
@@ -93,7 +94,7 @@ impl CommandHandler for RunHandler {
         };
 
         let script_cmd = scripts.get(script_name).ok_or_else(|| {
-            CommandError::GitFailed(format!(
+            CommandError::ProcessFailed(format!(
                 "script '{}' not found in package.json",
                 script_name
             ))
@@ -126,7 +127,7 @@ impl CommandHandler for RunHandler {
                     .env("PATH", &new_path)
                     .current_dir(&cwd)
                     .status()
-                    .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?
+                    .map_err(|e| CommandError::ProcessFailed(format!("failed to spawn shell: {e}")))?
             }
             #[cfg(not(windows))]
             {
@@ -135,13 +136,13 @@ impl CommandHandler for RunHandler {
                     .env("PATH", &new_path)
                     .current_dir(&cwd)
                     .status()
-                    .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?
+                    .map_err(|e| CommandError::ProcessFailed(format!("failed to spawn shell: {e}")))?
             }
         };
 
         if !status.success() {
             let code = status.code().unwrap_or(1);
-            return Err(CommandError::GitFailed(format!(
+            return Err(CommandError::ProcessFailed(format!(
                 "script '{}' exited with status {}",
                 script_name, code
             )));
@@ -195,19 +196,19 @@ impl RunHandler {
 
             let Some(cmd) = cmd_str else {
                 println!(
-                    "\n[{}] script '{}' not found — skipping",
-                    pkg.name, script_name
+                    "{}",
+                    format!("\n[{}] script '{}' not found — skipping", pkg.name, script_name).dimmed()
                 );
                 continue;
             };
 
-            println!("\n[{}] $ {}", pkg.name, cmd);
+            println!("{}", format!("\n[{}] $ {}", pkg.name, cmd).dimmed());
 
             let status = workspace::run_script_in_dir(&pkg.path, cmd, &self.script_args)?;
 
             if !status.success() {
                 let code = status.code().unwrap_or(1);
-                println!("[{}] exited with code {}", pkg.name, code);
+                println!("{}", format!("[{}] exited with code {}", pkg.name, code).yellow());
                 failures += 1;
             }
         }
@@ -216,7 +217,7 @@ impl RunHandler {
         if failures == 0 {
             println!("{}/{} packages succeeded.", total, total);
         } else {
-            println!("{} of {} package(s) failed.", failures, total);
+            println!("{}", format!("{} of {} package(s) failed.", failures, total).yellow());
         }
 
         Ok(())

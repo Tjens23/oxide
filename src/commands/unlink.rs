@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use async_trait::async_trait;
+use colored::Colorize;
 
 use crate::errors::{CommandError, ParseError};
 
@@ -14,7 +15,7 @@ fn is_link(path: &Path) -> bool {
 fn unlink_all() -> Result<(), CommandError> {
     let nm = Path::new("./node_modules");
     if !nm.exists() {
-        println!("No node_modules directory found.");
+        println!("{}", "No node_modules directory found.".dimmed());
         return Ok(());
     }
 
@@ -24,13 +25,13 @@ fn unlink_all() -> Result<(), CommandError> {
         let path = entry.path();
         if is_link(&path) {
             std::fs::remove_dir_all(&path).map_err(CommandError::FailedToWriteFile)?;
-            println!("Unlinked '{}'", entry.file_name().to_string_lossy());
+            println!("{} '{}'", "Unlinked".green(), entry.file_name().to_string_lossy());
             count += 1;
         }
     }
 
     if count == 0 {
-        println!("No linked packages found in ./node_modules");
+        println!("{}", "No linked packages found in ./node_modules".dimmed());
     }
     Ok(())
 }
@@ -53,7 +54,7 @@ fn unlink_package(pkg: &str) -> Result<(), CommandError> {
     }
 
     std::fs::remove_dir_all(&path).map_err(CommandError::FailedToWriteFile)?;
-    println!("Unlinked '{}'", pkg);
+    println!("{} '{}'", "Unlinked".green(), pkg);
     Ok(())
 }
 
@@ -69,7 +70,7 @@ fn unlink_global(pkg: &str) -> Result<(), CommandError> {
     }
 
     std::fs::remove_dir_all(&path).map_err(CommandError::FailedToWriteFile)?;
-    println!("Removed '{}' from global node_modules", pkg);
+    println!("{} '{}' from global node_modules", "Removed".green(), pkg);
     Ok(())
 }
 

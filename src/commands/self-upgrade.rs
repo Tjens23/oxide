@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use colored::Colorize;
 use serde::Deserialize;
 
 use crate::errors::{CommandError, ParseError};
@@ -49,11 +50,11 @@ impl CommandHandler for SelfUpgradeHandler {
         let latest_version = latest_tag.trim_start_matches('v');
 
         if latest_version == CURRENT_VERSION {
-            println!("oxide is already up to date (v{}).", CURRENT_VERSION);
+            println!("{}", format!("oxide is already up to date (v{}).", CURRENT_VERSION).green());
             return Ok(());
         }
 
-        println!("Upgrading oxide: v{} → {} …", CURRENT_VERSION, latest_tag);
+        println!("{}", format!("Upgrading oxide: v{} → {} …", CURRENT_VERSION, latest_tag).cyan());
 
         let binary_name = if cfg!(target_os = "windows") {
             "oxide-windows.exe"
@@ -135,7 +136,7 @@ impl CommandHandler for SelfUpgradeHandler {
             std::fs::rename(&temp_path, &current_exe).map_err(CommandError::FailedToWriteFile)?;
         }
 
-        println!("oxide upgraded to {} successfully.", latest_tag);
+        println!("{}", format!("oxide upgraded to {} successfully.", latest_tag).green().bold());
         Ok(())
     }
 }

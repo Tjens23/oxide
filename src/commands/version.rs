@@ -2,6 +2,7 @@ use std::fs;
 use std::process::Command;
 
 use async_trait::async_trait;
+use colored::Colorize;
 use semver::Version;
 
 use crate::{
@@ -63,7 +64,7 @@ impl CommandHandler for VersionHandler {
             .map_err(CommandError::FailedToSerializePackageLock)?;
         fs::write(PACKAGE_JSON, updated).map_err(CommandError::FailedToWriteFile)?;
 
-        println!("Updated {} → {}", PACKAGE_JSON, new_version);
+        println!("{}", format!("Updated {} → {}", PACKAGE_JSON, new_version).green());
 
         let status = Command::new("git")
             .args(["add", PACKAGE_JSON])
@@ -98,7 +99,7 @@ impl CommandHandler for VersionHandler {
             )));
         }
 
-        println!("Created git tag {}", tag);
+        println!("{}", format!("Created git tag {}", tag).green());
         Ok(())
     }
 }

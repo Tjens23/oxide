@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use colored::Colorize;
 use serde_json::Value;
 
 use crate::errors::{CommandError, ParseError};
@@ -46,10 +47,10 @@ impl CommandHandler for UninstallHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
-        println!("Uninstalling '{}'..", self.package_name);
+        println!("{} '{}'..", "Uninstalling".cyan(), self.package_name);
         Self::remove_from_node_modules(&self.package_name)?;
         Self::remove_from_package_json(&self.package_name)?;
-        println!("Uninstalled '{}'", self.package_name);
+        println!("{} '{}'", "Uninstalled".green(), self.package_name);
         Ok(())
     }
 }
