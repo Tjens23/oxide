@@ -50,7 +50,7 @@ pub(crate) fn read_ignore_patterns(dir: &Path) -> Vec<String> {
 pub(crate) fn is_ignored(rel: &str, user_patterns: &[String]) -> bool {
     let first = rel.split(['/', '\\']).next().unwrap_or("");
 
-    if ALWAYS_IGNORE.iter().any(|p| first == *p) {
+    if ALWAYS_IGNORE.contains(&first) {
         return true;
     }
 
@@ -84,7 +84,9 @@ fn collect_recursive(
         let path = entry.path();
         let rel = path
             .strip_prefix(root)
-            .unwrap()
+            .map_err(|_| {
+                CommandError::FailedToReadFile(std::io::Error::other("path not under root"))
+            })?
             .to_string_lossy()
             .replace('\\', "/");
 
@@ -112,7 +114,9 @@ pub(crate) fn pack(dir: &Path) -> Result<Vec<u8>, CommandError> {
     for path in &files {
         let rel = path
             .strip_prefix(dir)
-            .unwrap()
+            .map_err(|_| {
+                CommandError::FailedToReadFile(std::io::Error::other("path not under dir"))
+            })?
             .to_string_lossy()
             .replace('\\', "/");
         let tar_path = format!("package/{}", rel);
@@ -135,16 +139,28 @@ fn integrity_sha512(data: &[u8]) -> String {
     format!("sha512-{}", BASE64.encode(digest.as_slice()))
 }
 
-async fn publish_tarball(
-    client: &reqwest::Client,
-    token: &str,
-    pkg_json: &Value,
+struct PublishOptions<'a> {
+    client: &'a reqwest::Client,
+    token: &'a str,
+    pkg_json: &'a Value,
     tarball: Vec<u8>,
-    tag: &str,
-    access: Option<&str>,
-    otp: Option<&str>,
+    tag: &'a str,
+    access: Option<&'a str>,
+    otp: Option<&'a str>,
     dry_run: bool,
-) -> Result<(), CommandError> {
+}
+
+async fn publish_tarball(opts: PublishOptions<'_>) -> Result<(), CommandError> {
+    let PublishOptions {
+        client,
+        token,
+        pkg_json,
+        tarball,
+        tag,
+        access,
+        otp,
+        dry_run,
+    } = opts;
     let name = pkg_json["name"].as_str().ok_or_else(|| {
         CommandError::FailedToWriteFile(std::io::Error::other("missing \"name\" in package.json"))
     })?;
@@ -341,16 +357,16 @@ impl CommandHandler for PublishHandler {
         let tag = self.tag.as_deref().unwrap_or("latest");
         let client = reqwest::Client::new();
 
-        publish_tarball(
-            &client,
-            &token,
-            &pkg_json,
+        publish_tarball(PublishOptions {
+            client: &client,
+            token: &token,
+            pkg_json: &pkg_json,
             tarball,
             tag,
-            self.access.as_deref(),
-            self.otp.as_deref(),
-            self.dry_run,
-        )
+            access: self.access.as_deref(),
+            otp: self.otp.as_deref(),
+            dry_run: self.dry_run,
+        })
         .await
     }
 }

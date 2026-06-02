@@ -35,12 +35,12 @@ impl CommandHandler for DlxHandler {
             .ok_or_else(|| ParseError::MissingArgument("<package>".to_string()))?;
 
         let rest: Vec<String> = args.collect();
-        if let Some(first) = rest.first() {
-            if !first.starts_with('-') {
-                self.binary_override = Some(first.clone());
-                self.bin_args = rest[1..].to_vec();
-                return Ok(());
-            }
+        if let Some(first) = rest.first()
+            && !first.starts_with('-')
+        {
+            self.binary_override = Some(first.clone());
+            self.bin_args = rest[1..].to_vec();
+            return Ok(());
         }
         self.bin_args = rest;
         Ok(())
@@ -49,7 +49,7 @@ impl CommandHandler for DlxHandler {
     async fn execute(&self) -> Result<(), CommandError> {
         let (package_name, semantic_version) =
             Versions::parse_semantic_package_details(self.package_spec.clone())
-                .map_err(|e| CommandError::GitFailed(e.to_string()))?;
+                .map_err(|e| CommandError::MalformedPackageId(e.to_string()))?;
 
         let client = reqwest::Client::new();
         let full_version = Versions::resolve_full_version(semantic_version.as_ref());
@@ -65,10 +65,7 @@ impl CommandHandler for DlxHandler {
 
         let resolved_version = version_data.version.clone();
         if !crate::util::is_safe_path_component(&resolved_version) {
-            return Err(CommandError::GitFailed(format!(
-                "unsafe version string received from registry: {}",
-                resolved_version
-            )));
+            return Err(CommandError::MalformedPackageId(resolved_version));
         }
 
         // Isolated dir layout:
@@ -124,12 +121,12 @@ impl CommandHandler for DlxHandler {
             .current_dir(&cwd)
             .status()
             .map_err(|e| {
-                CommandError::GitFailed(format!("failed to spawn '{}': {}", bin_path, e))
+                CommandError::ProcessFailed(format!("failed to spawn '{}': {}", bin_path, e))
             })?;
 
         if !status.success() {
             let code = status.code().unwrap_or(1);
-            return Err(CommandError::GitFailed(format!(
+            return Err(CommandError::ProcessFailed(format!(
                 "process exited with code {}",
                 code
             )));
@@ -260,7 +257,7 @@ pub fn resolve_binary(
     let raw = std::fs::read_to_string(&pkg_json_path).map_err(CommandError::FailedToReadFile)?;
     let json: Value = serde_json::from_str(&raw).map_err(CommandError::ParsingFailed)?;
 
-    let short_name = package_name.split('/').last().unwrap_or(package_name);
+    let short_name = package_name.split('/').next_back().unwrap_or(package_name);
 
     match json.get("bin") {
         Some(Value::String(rel)) => {
@@ -283,7 +280,7 @@ pub fn resolve_binary(
         return Ok(candidate);
     }
 
-    Err(CommandError::GitFailed(format!(
+    Err(CommandError::ProcessFailed(format!(
         "could not find a binary entry point in '{}'. \
          Try specifying the binary name: oxide dlx {} <binary>",
         pkg_json_path, package_name
@@ -317,5 +314,5 @@ pub fn parse_shebang(line: &str) -> Option<String> {
     } else {
         parts[0]
     };
-    prog.split('/').last().map(|s| s.to_string())
+    prog.split('/').next_back().map(|s| s.to_string())
 }

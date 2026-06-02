@@ -25,7 +25,6 @@ impl CommandHandler for WhyHandler {
     async fn execute(&self) -> Result<(), CommandError> {
         let target = &self.package_name;
 
-        // Read the project's package.json
         let pkg_raw =
             std::fs::read_to_string("./package.json").map_err(CommandError::FailedToReadFile)?;
         let pkg_json: Value =
@@ -43,7 +42,6 @@ impl CommandHandler for WhyHandler {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        // Check whether the package is actually installed
         let installed_version = read_installed_version(target);
         if installed_version.is_none() && in_deps.is_none() && in_dev_deps.is_none() {
             println!(
@@ -53,7 +51,6 @@ impl CommandHandler for WhyHandler {
             return Ok(());
         }
 
-        // Print direct dependency status
         if let Some(ref constraint) = in_deps {
             println!("'{}' is a direct dependency  ({})", target, constraint);
         }
@@ -67,7 +64,6 @@ impl CommandHandler for WhyHandler {
             println!("Not found in node_modules — run `oxide install`.");
         }
 
-        // Scan node_modules to find transitive dependents
         let nm = std::path::Path::new("./node_modules");
         if !nm.exists() {
             return Ok(());
@@ -80,7 +76,6 @@ impl CommandHandler for WhyHandler {
             let path = entry.path();
             let dir_name = entry.file_name().to_string_lossy().to_string();
 
-            // Handle scoped packages (@scope/pkg)
             let pkg_jsons: Vec<std::path::PathBuf> = if dir_name.starts_with('@') && path.is_dir() {
                 match std::fs::read_dir(&path) {
                     Ok(inner) => inner

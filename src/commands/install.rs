@@ -166,7 +166,7 @@ impl InstallHandler {
 
             let (package_name, semantic_version) =
                 Versions::parse_semantic_package_details(package_details)
-                    .map_err(|e| CommandError::GitFailed(e.to_string()))?;
+                    .map_err(|e| CommandError::MalformedPackageId(e.to_string()))?;
 
             let handler = InstallHandler {
                 package_name,
@@ -195,15 +195,12 @@ impl InstallHandler {
         let (is_cached, cached_version) =
             Cache::exists(&self.package_name, full_version, semantic_version).await?;
 
-        Installer::create_modules_dir();
+        Installer::create_modules_dir()?;
 
         if is_cached {
-            let version = cached_version.expect("Could not resolve version of cached package");
+            let version = cached_version.ok_or(CommandError::InvalidVersion)?;
             if !crate::util::is_safe_path_component(&version) {
-                return Err(CommandError::GitFailed(format!(
-                    "unsafe version string in cache: {}",
-                    version
-                )));
+                return Err(CommandError::MalformedPackageId(version));
             }
             let stringified = Versions::stringify(&self.package_name, &version);
             let lockfile_path = PathBuf::from(CACHE_DIRECTORY.as_str())
@@ -247,10 +244,7 @@ impl InstallHandler {
         let resolved_version = version_data.version.clone();
 
         if !crate::util::is_safe_path_component(&stringified) {
-            return Err(CommandError::GitFailed(format!(
-                "unsafe package identifier received from registry: {}",
-                stringified
-            )));
+            return Err(CommandError::MalformedPackageId(stringified));
         }
 
         let package_info = PackageInfo {
@@ -290,7 +284,7 @@ impl InstallHandler {
 
     fn global_nm_dir() -> Result<PathBuf, CommandError> {
         let base = dirs::config_dir()
-            .ok_or_else(|| CommandError::GitFailed("cannot determine config directory".into()))?
+            .ok_or(CommandError::ConfigDirUnavailable)?
             .join("oxide");
         Ok(base.join(GLOBAL_MODULES_SUBDIR))
     }
@@ -300,7 +294,7 @@ impl InstallHandler {
         let base = match cfg.get("global-bin-dir") {
             Some(dir) => return Ok(PathBuf::from(dir)),
             None => dirs::config_dir()
-                .ok_or_else(|| CommandError::GitFailed("cannot determine config directory".into()))?
+                .ok_or(CommandError::ConfigDirUnavailable)?
                 .join("oxide"),
         };
         Ok(base.join(GLOBAL_BIN_SUBDIR))
@@ -324,7 +318,7 @@ impl InstallHandler {
         std::fs::create_dir_all(&global_bin).map_err(CommandError::FailedToCreateFile)?;
 
         let (resolved_name, resolved_version) = if is_cached {
-            let version = cached_version.expect("Could not resolve version of cached package");
+            let version = cached_version.ok_or(CommandError::InvalidVersion)?;
             let stringified = Versions::stringify(&self.package_name, &version);
             Cache::load_cached_version(stringified, &global_nm)?;
             (self.package_name.clone(), version)
@@ -348,10 +342,7 @@ impl InstallHandler {
             let resolved_version = version_data.version.clone();
 
             if !crate::util::is_safe_path_component(&stringified) {
-                return Err(CommandError::GitFailed(format!(
-                    "unsafe package identifier received from registry: {}",
-                    stringified
-                )));
+                return Err(CommandError::MalformedPackageId(stringified));
             }
 
             let package_info = PackageInfo {
@@ -373,7 +364,10 @@ impl InstallHandler {
             (resolved_name, resolved_version)
         };
 
-        let short_name = resolved_name.split('/').last().unwrap_or(&resolved_name);
+        let short_name = resolved_name
+            .split('/')
+            .next_back()
+            .unwrap_or(&resolved_name);
         let package_dir = global_nm.join(short_name);
         Self::link_global_binaries(&package_dir, &global_bin, short_name);
 

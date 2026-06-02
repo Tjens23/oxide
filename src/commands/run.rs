@@ -50,8 +50,8 @@ impl CommandHandler for RunHandler {
             }
         }
 
-        let mut iter = rest.into_iter();
-        while let Some(arg) = iter.next() {
+        let iter = rest.into_iter();
+        for arg in iter {
             if self.script.is_none() {
                 self.script = Some(arg);
             } else {
@@ -70,10 +70,10 @@ impl CommandHandler for RunHandler {
         let pkg_path = cwd.join(PACKAGE_JSON);
 
         let contents =
-            std::fs::read_to_string(&pkg_path).map_err(|e| CommandError::FailedToReadFile(e))?;
+            std::fs::read_to_string(&pkg_path).map_err(CommandError::FailedToReadFile)?;
 
         let pkg: PackageJson =
-            serde_json::from_str(&contents).map_err(|e| CommandError::ParsingFailed(e))?;
+            serde_json::from_str(&contents).map_err(CommandError::ParsingFailed)?;
 
         let scripts = pkg.scripts.unwrap_or_default();
 

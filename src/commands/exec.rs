@@ -19,7 +19,7 @@ pub struct ExecHandler {
 #[async_trait]
 impl CommandHandler for ExecHandler {
     fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
-        while let Some(arg) = args.next() {
+        for arg in &mut *args {
             match arg.as_str() {
                 "--shell-mode" | "-c" => self.shell_mode = true,
                 _ if self.bin.is_none() => self.bin = Some(arg),
@@ -35,7 +35,10 @@ impl CommandHandler for ExecHandler {
     }
 
     async fn execute(&self) -> Result<(), CommandError> {
-        let bin = self.bin.as_deref().unwrap();
+        let bin = self
+            .bin
+            .as_deref()
+            .ok_or_else(|| CommandError::ProcessFailed("no binary specified".into()))?;
 
         let cwd = std::env::current_dir().map_err(CommandError::FailedToWriteFile)?;
         let local_bin = cwd.join(NODE_MODULES).join(BIN_DIR);
@@ -64,7 +67,9 @@ impl CommandHandler for ExecHandler {
                     .env("PATH", &new_path)
                     .current_dir(&cwd)
                     .status()
-                    .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?
+                    .map_err(|e| {
+                        CommandError::ProcessFailed(format!("failed to spawn shell: {e}"))
+                    })?
             }
             #[cfg(not(windows))]
             {
@@ -77,7 +82,9 @@ impl CommandHandler for ExecHandler {
                     .env("PATH", &new_path)
                     .current_dir(&cwd)
                     .status()
-                    .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?
+                    .map_err(|e| {
+                        CommandError::ProcessFailed(format!("failed to spawn shell: {e}"))
+                    })?
             }
         } else {
             Command::new(bin)
@@ -85,12 +92,14 @@ impl CommandHandler for ExecHandler {
                 .env("PATH", &new_path)
                 .current_dir(&cwd)
                 .status()
-                .map_err(|e| CommandError::GitFailed(format!("failed to spawn '{}': {}", bin, e)))?
+                .map_err(|e| {
+                    CommandError::ProcessFailed(format!("failed to spawn '{}': {}", bin, e))
+                })?
         };
 
         if !status.success() {
             let code = status.code().unwrap_or(1);
-            return Err(CommandError::GitFailed(format!(
+            return Err(CommandError::ProcessFailed(format!(
                 "'{}' exited with status {}",
                 bin, code
             )));

@@ -41,7 +41,7 @@ impl CommandHandler for WorkspacesHandler {
             return Ok(());
         }
 
-        println!("{:<35} {:<12} {}", "Name", "Version", "Path");
+        println!("{:<35} {:<12} Path", "Name", "Version");
         println!("{}", "-".repeat(72));
 
         for pkg in &matched {

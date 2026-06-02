@@ -114,7 +114,7 @@ impl Cache {
             ));
         }
 
-        let semantic_version = semantic_version.unwrap();
+        let semantic_version = semantic_version.ok_or(CommandError::InvalidVersion)?;
 
         if package_name.starts_with('@') {
             if let Some(slash_pos) = package_name.find('/') {
@@ -174,10 +174,7 @@ impl Cache {
 
     pub fn is_in_cache(package: &String, version: &String) -> bool {
         let cached_version = CACHED_VERSIONS.get(package);
-        match cached_version {
-            Some(ver) if &ver.version == version => true,
-            _ => false,
-        }
+        matches!(cached_version, Some(ver) if &ver.version == version)
     }
 
     pub fn get_latest_version_in_cache(package_name: &String) -> Option<String> {
@@ -193,10 +190,7 @@ impl Cache {
         dest_root: &std::path::Path,
     ) -> Result<(), CommandError> {
         if !crate::util::is_safe_path_component(&package) {
-            return Err(CommandError::GitFailed(format!(
-                "unsafe package path component: {}",
-                package
-            )));
+            return Err(CommandError::MalformedPackageId(package));
         }
         let lockfile_path = PathBuf::from(CACHE_DIRECTORY.as_str())
             .join(&package)

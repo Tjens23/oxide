@@ -152,8 +152,8 @@ async fn classic_login(
     otp: Option<&str>,
 ) -> Result<String, CommandError> {
     let username = prompt("Username");
-    let password = rpassword::prompt_password("Password: ")
-        .map_err(|e| CommandError::FailedToWriteFile(e.into()))?;
+    let password =
+        rpassword::prompt_password("Password: ").map_err(CommandError::FailedToWriteFile)?;
     let email = prompt("Email");
 
     let body = serde_json::json!({

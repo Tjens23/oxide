@@ -116,7 +116,7 @@ impl CommandHandler for ForeachHandler {
                 println!("[{}] exited with code {}", pkg.name, code);
                 failures += 1;
                 if self.bail {
-                    return Err(CommandError::GitFailed(format!(
+                    return Err(CommandError::ProcessFailed(format!(
                         "'{}' failed in '{}' (exit {})",
                         self.script, pkg.name, code
                     )));

@@ -47,10 +47,10 @@ impl Installer {
         let package_version =
             Versions::resolve_partial_version(semantic_version, &package_data.versions)?;
 
-        Ok(package_data
+        package_data
             .versions
             .remove(&package_version)
-            .ok_or(CommandError::InvalidVersion)?)
+            .ok_or(CommandError::InvalidVersion)
     }
 
     fn already_resolved(
@@ -244,7 +244,7 @@ impl Installer {
         cached_version: Option<String>,
         name: &str,
     ) -> Result<(), CommandError> {
-        let version = cached_version.expect("Could not resolve version of cached package");
+        let version = cached_version.ok_or(CommandError::InvalidVersion)?;
         let name_string = name.to_string();
         let stringified = Versions::stringify(&name_string, &version);
 
@@ -260,24 +260,23 @@ impl Installer {
             .map_err(|_| CommandError::MutexPoisoned)?
             .contains_key(stringified.as_str());
 
-        if !in_dep_map {
-            if let Err(e) = Cache::load_cached_version(
+        if !in_dep_map
+            && let Err(e) = Cache::load_cached_version(
                 stringified,
                 std::path::Path::new(crate::constants::NODE_MODULES),
-            ) {
-                eprintln!("Warning: failed to load cached package: {e}");
-            }
+            )
+        {
+            eprintln!("Warning: failed to load cached package: {e}");
         }
 
         Ok(())
     }
 
-    pub fn create_modules_dir() {
-        if Path::new(NODE_MODULES).exists() {
-            return;
+    pub fn create_modules_dir() -> Result<(), CommandError> {
+        if !Path::new(NODE_MODULES).exists() {
+            fs::create_dir_all(NODE_MODULES).map_err(CommandError::FailedToCreateFile)?;
         }
-
-        fs::create_dir(NODE_MODULES).expect("Failed to create node modules folder");
+        Ok(())
     }
 
     pub fn setup_cache_packages(

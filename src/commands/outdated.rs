@@ -83,7 +83,7 @@ impl CommandHandler for OutdatedHandler {
 
         outdated.sort_by(|a, b| a.name.cmp(&b.name));
 
-        println!("{:<30} {:<15} {}", "Package", "Current", "Latest");
+        println!("{:<30} {:<15} Latest", "Package", "Current");
         println!("{}", "-".repeat(60));
 
         for status in &outdated {

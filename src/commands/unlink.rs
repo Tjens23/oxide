@@ -82,7 +82,7 @@ pub struct UnlinkHandler {
 #[async_trait]
 impl CommandHandler for UnlinkHandler {
     fn parse(&mut self, args: &mut dyn Iterator<Item = String>) -> Result<(), ParseError> {
-        while let Some(arg) = args.next() {
+        for arg in &mut *args {
             match arg.as_str() {
                 "--global" | "-g" => self.global = true,
                 _ => self.package_name = Some(arg),

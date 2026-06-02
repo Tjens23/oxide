@@ -55,4 +55,10 @@ pub enum CommandError {
     UnknownConfigKey(String),
     #[error("failed to write config ({0})")]
     ConfigWriteFailed(Error),
+    #[error("failed to spawn process: {0}")]
+    ProcessFailed(String),
+    #[error("cannot determine OS config directory")]
+    ConfigDirUnavailable,
+    #[error("unsafe or malformed package identifier: {0}")]
+    MalformedPackageId(String),
 }

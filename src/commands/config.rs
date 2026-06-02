@@ -72,7 +72,7 @@ impl CommandHandler for ConfigHandler {
         {
             ConfigSubcommand::List => {
                 let cfg = OxideConfig::load();
-                println!("{:<20} {:<40} {}", "Key", "Description", "Value");
+                println!("{:<20} {:<40} Value", "Key", "Description");
                 println!("{}", "-".repeat(75));
                 for (key, desc) in VALID_KEYS {
                     let value = cfg.get(key).unwrap_or("(not set)");

@@ -59,7 +59,7 @@ impl OxideConfig {
 
     pub fn is_true(&self, key: &str) -> bool {
         self.get(key)
-            .map_or(false, |v| v.eq_ignore_ascii_case("true"))
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
     }
 
     pub fn set(&mut self, key: &str, value: String) -> Result<(), CommandError> {
@@ -74,6 +74,7 @@ impl OxideConfig {
         self.0.remove(key).is_some()
     }
 
+    #[allow(dead_code)]
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
         self.0.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }

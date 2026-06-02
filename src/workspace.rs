@@ -186,7 +186,7 @@ pub fn run_script_in_dir(
         .env("PATH", &new_path)
         .current_dir(dir)
         .status()
-        .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?;
+        .map_err(|e| CommandError::ProcessFailed(format!("failed to spawn shell: {e}")))?;
 
     #[cfg(not(windows))]
     let status = std::process::Command::new("/bin/sh")
@@ -194,7 +194,7 @@ pub fn run_script_in_dir(
         .env("PATH", &new_path)
         .current_dir(dir)
         .status()
-        .map_err(|e| CommandError::GitFailed(format!("failed to spawn shell: {e}")))?;
+        .map_err(|e| CommandError::ProcessFailed(format!("failed to spawn shell: {e}")))?;
 
     Ok(status)
 }

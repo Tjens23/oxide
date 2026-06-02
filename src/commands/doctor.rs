@@ -116,7 +116,7 @@ impl CommandHandler for DoctorHandler {
             )),
         }
 
-        println!("{:<20} {:<8} {}", "Check", "Status", "Detail");
+        println!("{:<20} {:<8} Detail", "Check", "Status");
         println!("{}", "-".repeat(72));
 
         let mut failures = 0usize;

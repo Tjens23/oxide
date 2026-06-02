@@ -65,7 +65,6 @@ impl CommandHandler for VersionHandler {
 
         println!("Updated {} → {}", PACKAGE_JSON, new_version);
 
-        // Stage package.json
         let status = Command::new("git")
             .args(["add", PACKAGE_JSON])
             .status()

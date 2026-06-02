@@ -131,7 +131,7 @@ impl Versions {
         let mut matching: Vec<Version> = versions
             .keys()
             .filter_map(|v| Version::parse(v).ok())
-            .filter(|v| semantic_version.map_or(true, |req| req.matches(v)))
+            .filter(|v| semantic_version.is_none_or(|req| req.matches(v)))
             .collect();
 
         matching.sort();
@@ -149,6 +149,6 @@ impl Versions {
 
     /// Returns `true` if `version` is the "latest" sentinel value.
     pub fn is_latest(version: Option<&String>) -> bool {
-        version.map_or(false, |v| v == LATEST)
+        version.is_some_and(|v| v == LATEST)
     }
 }
