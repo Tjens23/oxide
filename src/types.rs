@@ -40,6 +40,8 @@ pub struct PackageLock {
     #[serde(rename = "isLatest")]
     pub is_latest: bool,
     pub dependencies: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub integrity: Option<String>,
 }
 
 impl PackageLock {
@@ -47,6 +49,7 @@ impl PackageLock {
         Self {
             is_latest,
             dependencies: Vec::new(),
+            integrity: None,
         }
     }
 }

@@ -13,6 +13,15 @@ pub const BIN_DIR: &str = ".bin";
 /// Sub-directory inside the OS cache folder where oxide stores downloaded packages.
 pub const CACHE_SUBDIR: &str = "node-cache";
 
+/// Sub-directory inside the OS cache folder where raw tarballs are stored by integrity hash.
+pub const TARBALL_SUBDIR: &str = "tarballs";
+
+/// Sub-directory inside the OS cache folder for the content-addressed file store (hardlinks).
+pub const STORE_SUBDIR: &str = "store";
+
+/// Filename of the oxide state file written into node_modules for fast-path no-op detection.
+pub const OXIDE_STATE_FILE: &str = ".oxide-state";
+
 /// Filename of the per-user oxide config file.
 pub const CONFIG_FILE: &str = "config.json";
 

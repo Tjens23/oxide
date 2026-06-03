@@ -1478,6 +1478,7 @@ dependencies = [
  "base64",
  "bytes",
  "clap",
+ "console",
  "dirs",
  "flate2",
  "indicatif",

@@ -5,22 +5,30 @@ use std::{
 };
 
 use async_trait::async_trait;
-use indicatif::{ProgressBar, ProgressStyle};
+use console::{Emoji, style};
+use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use semver::VersionReq;
 use serde_json::Value;
 
 use crate::{
     cache::{CACHE_DIRECTORY, Cache},
     config::OxideConfig,
-    constants::{GLOBAL_BIN_SUBDIR, GLOBAL_MODULES_SUBDIR, NODE_MODULES, OXIDE_LOCK},
+    constants::{GLOBAL_BIN_SUBDIR, GLOBAL_MODULES_SUBDIR, NODE_MODULES, OXIDE_LOCK, OXIDE_STATE_FILE},
     errors::{CommandError, ParseError},
-    installer::{InstallContext, Installer, PackageInfo},
+    installer::{InstallContext, InstallProgress, Installer, PackageInfo},
+    types::DependencyMap,
     util::TaskAllocator,
     versions::Versions,
     workspace,
 };
 
 use super::command_handler::CommandHandler;
+
+static LOOKING_GLASS: Emoji<'_, '_> = Emoji("🔍  ", "");
+static TRUCK: Emoji<'_, '_> = Emoji("🚚  ", "");
+static CLIP: Emoji<'_, '_> = Emoji("🔗  ", "");
+static PAPER: Emoji<'_, '_> = Emoji("📃  ", "");
+static SPARKLE: Emoji<'_, '_> = Emoji("✨ ", ":-)");
 
 #[derive(Default)]
 pub struct InstallHandler {
@@ -142,42 +150,151 @@ impl CommandHandler for InstallHandler {
 
 impl InstallHandler {
     async fn install_from_package_json(&self) -> Result<(), CommandError> {
-        let content =
-            std::fs::read_to_string("./package.json").map_err(CommandError::FailedToReadFile)?;
+        use sha2::{Digest, Sha256};
+
+        let content = std::fs::read_to_string("./package.json")
+            .map_err(CommandError::FailedToReadFile)?;
         let json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
 
-        let deps = json
+        let pkgjson_hash: String = Sha256::digest(content.as_bytes())
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect();
+        let nm_path = std::path::Path::new(NODE_MODULES);
+        let state_path = nm_path.join(OXIDE_STATE_FILE);
+        if let Ok(state_raw) = std::fs::read_to_string(&state_path) {
+            if let Ok(state) = serde_json::from_str::<serde_json::Value>(&state_raw) {
+                if state
+                    .get("pkgjson_hash")
+                    .and_then(|v| v.as_str())
+                    == Some(pkgjson_hash.as_str())
+                {
+                    if let Ok(lock_raw) = std::fs::read_to_string(OXIDE_LOCK) {
+                        if let Ok(lockfile) =
+                            serde_json::from_str::<DependencyMap>(&lock_raw)
+                        {
+                            if !lockfile.is_empty()
+                                && Installer::is_fully_cached(&lockfile)
+                                && Installer::node_modules_matches_lockfile(&lockfile)
+                            {
+                                println!("Already up to date.");
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let dep_obj = json
             .get("dependencies")
             .and_then(|d| d.as_object())
             .cloned()
             .unwrap_or_default();
 
-        if deps.is_empty() {
+        if dep_obj.is_empty() {
             println!("No dependencies found in package.json.");
             return Ok(());
         }
 
-        for (name, version_value) in &deps {
-            let version_str = version_value.as_str().unwrap_or("");
-            let package_details = if version_str.is_empty() {
-                name.clone()
-            } else {
-                format!("{}@{}", name, version_str)
-            };
+        let all_deps: HashMap<String, String> = dep_obj
+            .into_iter()
+            .filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_string())))
+            .collect();
 
-            let (package_name, semantic_version) =
-                Versions::parse_semantic_package_details(package_details)
-                    .map_err(|e| CommandError::MalformedPackageId(e.to_string()))?;
+        let started_at = std::time::Instant::now();
+        let cfg = OxideConfig::load();
+        let progress_mode = cfg.get("install-progress").unwrap_or("logging");
 
-            let handler = InstallHandler {
-                package_name,
-                semantic_version,
-                no_save: self.no_save,
-                ignore_scripts: self.ignore_scripts,
-                ..Default::default()
-            };
+        let progress = match progress_mode {
+            "bar" => {
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
+                        .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+                );
+                pb.set_message("Installing packages...");
+                pb.enable_steady_tick(std::time::Duration::from_millis(80));
+                InstallProgress::Bar(Arc::new(pb))
+            }
+            "both" => {
+                println!(
+                    "{} {}Resolving packages...",
+                    style("[1/4]").bold().dim(),
+                    LOOKING_GLASS
+                );
+                InstallProgress::Both(Arc::new(MultiProgress::new()))
+            }
+            _ => {
+                println!("Installing packages from package.json..");
+                InstallProgress::Logging
+            }
+        };
 
-            handler.execute_single().await?;
+        Installer::create_modules_dir()?;
+
+        let client = reqwest::Client::new();
+        let dependency_map_mux = Arc::new(Mutex::new(HashMap::new()));
+        let install_context = InstallContext {
+            client,
+            dependency_map_mux: Arc::clone(&dependency_map_mux),
+            progress: progress.clone(),
+        };
+
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!(
+                "{} {}Fetching packages...",
+                style("[2/4]").bold().dim(),
+                TRUCK
+            );
+        }
+
+        Installer::install_all(install_context, all_deps).await?;
+        TaskAllocator::block_until_done();
+        progress.finish();
+
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!(
+                "{} {}Linking dependencies...",
+                style("[3/4]").bold().dim(),
+                CLIP
+            );
+        }
+
+        Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
+        Installer::write_project_lockfile(Arc::clone(&dependency_map_mux))?;
+
+        {
+            let dep_map = dependency_map_mux
+                .lock()
+                .map_err(|_| CommandError::MutexPoisoned)?;
+            let desired = Cache::desired_node_modules(&dep_map);
+            let current = Cache::read_current_node_modules(nm_path);
+            Cache::apply_node_modules_diff(&current, &desired, nm_path)?;
+            Cache::link_all_to_node_modules(&dep_map, nm_path)?;
+        }
+
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!(
+                "{} {}Building fresh packages...",
+                style("[4/4]").bold().dim(),
+                PAPER
+            );
+        }
+
+        // Write the oxide-state sidecar so the next run can take the fast path.
+        let state = serde_json::json!({ "pkgjson_hash": pkgjson_hash });
+        let _ = std::fs::write(
+            &state_path,
+            serde_json::to_string(&state).unwrap_or_default(),
+        );
+
+        self.note_ignore_scripts();
+
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!("{} Done in {}", SPARKLE, HumanDuration(started_at.elapsed()));
+        } else {
+            println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
         }
 
         Ok(())
@@ -185,23 +302,34 @@ impl InstallHandler {
 
     async fn execute_single(&self) -> Result<(), CommandError> {
         let cfg = OxideConfig::load();
-        let progress_enabled = cfg.is_true("install-progress");
-
-        let pb = if progress_enabled {
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(
-                ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
-                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-            );
-            pb.set_message(format!("Installing '{}'..", self.package_name));
-            pb.enable_steady_tick(std::time::Duration::from_millis(80));
-            Some(Arc::new(pb))
-        } else {
-            println!("Installing '{}'..", self.package_name);
-            None
-        };
+        let progress_mode = cfg.get("install-progress").unwrap_or("logging");
 
         let started_at = std::time::Instant::now();
+
+        let progress = match progress_mode {
+            "bar" => {
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
+                        .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+                );
+                pb.set_message(format!("Installing '{}'..", self.package_name));
+                pb.enable_steady_tick(std::time::Duration::from_millis(80));
+                InstallProgress::Bar(Arc::new(pb))
+            }
+            "both" => {
+                println!(
+                    "{} {}Resolving packages...",
+                    style("[1/4]").bold().dim(),
+                    LOOKING_GLASS
+                );
+                InstallProgress::Both(Arc::new(MultiProgress::new()))
+            }
+            _ => {
+                println!("Installing '{}'..", self.package_name);
+                InstallProgress::Logging
+            }
+        };
 
         let client = reqwest::Client::new();
         let semantic_version = self.semantic_version.as_ref();
@@ -230,6 +358,7 @@ impl InstallHandler {
                 .unwrap_or(false);
 
             if lockfile_complete {
+                progress.finish();
                 Cache::load_cached_version(stringified, std::path::Path::new(NODE_MODULES))?;
                 if !self.no_save {
                     Self::update_package_json(&self.package_name, &version, self.save_dev)?;
@@ -250,10 +379,18 @@ impl InstallHandler {
 
         let dependency_map_mux = Arc::new(Mutex::new(HashMap::new()));
 
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!(
+                "{} {}Fetching packages...",
+                style("[2/4]").bold().dim(),
+                TRUCK
+            );
+        }
+
         let install_context = InstallContext {
             client,
             dependency_map_mux: Arc::clone(&dependency_map_mux),
-            progress: pb.clone(),
+            progress: progress.clone(),
         };
 
         let stringified = Versions::stringify(&version_data.name, &version_data.version);
@@ -262,6 +399,19 @@ impl InstallHandler {
 
         if !crate::util::is_safe_path_component(&stringified) {
             return Err(CommandError::MalformedPackageId(stringified));
+        }
+
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!(
+                "{} {}Linking dependencies...",
+                style("[3/4]").bold().dim(),
+                CLIP
+            );
+            println!(
+                "{} {}Building fresh packages...",
+                style("[4/4]").bold().dim(),
+                PAPER
+            );
         }
 
         let package_info = PackageInfo {
@@ -277,10 +427,7 @@ impl InstallHandler {
         )?;
 
         TaskAllocator::block_until_done();
-
-        if let Some(ref pb) = pb {
-            pb.finish_and_clear();
-        }
+        progress.finish();
 
         Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
         Installer::write_project_lockfile(dependency_map_mux)?;
@@ -292,7 +439,11 @@ impl InstallHandler {
 
         self.note_ignore_scripts();
 
-        println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
+        if matches!(progress, InstallProgress::Both(_)) {
+            println!("{} Done in {}", SPARKLE, HumanDuration(started_at.elapsed()));
+        } else {
+            println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
+        }
         Ok(())
     }
 
@@ -323,23 +474,35 @@ impl InstallHandler {
 
     async fn execute_global(&self) -> Result<(), CommandError> {
         let cfg = OxideConfig::load();
-        let progress_enabled = cfg.is_true("install-progress");
-
-        let pb = if progress_enabled {
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(
-                ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
-                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-            );
-            pb.set_message(format!("Installing '{}' globally..", self.package_name));
-            pb.enable_steady_tick(std::time::Duration::from_millis(80));
-            Some(Arc::new(pb))
-        } else {
-            println!("Installing '{}' globally..", self.package_name);
-            None
-        };
+        let progress_mode = cfg.get("install-progress").unwrap_or("logging");
 
         let started_at = std::time::Instant::now();
+
+        let progress = match progress_mode {
+            "bar" => {
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
+                        .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+                );
+                pb.set_message(format!("Installing '{}' globally..", self.package_name));
+                pb.enable_steady_tick(std::time::Duration::from_millis(80));
+                InstallProgress::Bar(Arc::new(pb))
+            }
+            "both" => {
+                println!(
+                    "{} {}Resolving packages...",
+                    style("[1/4]").bold().dim(),
+                    LOOKING_GLASS
+                );
+                InstallProgress::Both(Arc::new(MultiProgress::new()))
+            }
+            _ => {
+                println!("Installing '{}' globally..", self.package_name);
+                InstallProgress::Logging
+            }
+        };
+
         let client = reqwest::Client::new();
         let semantic_version = self.semantic_version.as_ref();
         let full_version = Versions::resolve_full_version(semantic_version);
@@ -354,6 +517,7 @@ impl InstallHandler {
         std::fs::create_dir_all(&global_bin).map_err(CommandError::FailedToCreateFile)?;
 
         let (resolved_name, resolved_version) = if is_cached {
+            progress.finish();
             let version = cached_version.ok_or(CommandError::InvalidVersion)?;
             let stringified = Versions::stringify(&self.package_name, &version);
             Cache::load_cached_version(stringified, &global_nm)?;
@@ -368,10 +532,19 @@ impl InstallHandler {
             .await?;
 
             let dependency_map_mux = Arc::new(Mutex::new(HashMap::new()));
+
+            if matches!(progress, InstallProgress::Both(_)) {
+                println!(
+                    "{} {}Fetching packages...",
+                    style("[2/4]").bold().dim(),
+                    TRUCK
+                );
+            }
+
             let install_context = InstallContext {
                 client,
                 dependency_map_mux: Arc::clone(&dependency_map_mux),
-                progress: pb.clone(),
+                progress: progress.clone(),
             };
 
             let stringified = Versions::stringify(&version_data.name, &version_data.version);
@@ -380,6 +553,19 @@ impl InstallHandler {
 
             if !crate::util::is_safe_path_component(&stringified) {
                 return Err(CommandError::MalformedPackageId(stringified));
+            }
+
+            if matches!(progress, InstallProgress::Both(_)) {
+                println!(
+                    "{} {}Linking dependencies...",
+                    style("[3/4]").bold().dim(),
+                    CLIP
+                );
+                println!(
+                    "{} {}Building fresh packages...",
+                    style("[4/4]").bold().dim(),
+                    PAPER
+                );
             }
 
             let package_info = PackageInfo {
@@ -394,10 +580,7 @@ impl InstallHandler {
                 Arc::new(Mutex::new(Vec::new())),
             )?;
             TaskAllocator::block_until_done();
-
-            if let Some(ref pb) = pb {
-                pb.finish_and_clear();
-            }
+            progress.finish();
 
             Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
             Installer::write_project_lockfile(dependency_map_mux)?;

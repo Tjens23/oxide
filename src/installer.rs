@@ -7,11 +7,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use indicatif::ProgressBar;
+use std::time::Duration;
+
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::util::{self, TaskAllocator};
 use crate::{
-    cache::{CACHE_DIRECTORY, Cache},
+    cache::{CACHE_DIRECTORY, FILE_STORE_DIR, Cache},
     constants::{NODE_MODULES, OXIDE_LOCK},
     errors::CommandError::{self},
     http::HTTPRequest,
@@ -20,6 +22,25 @@ use crate::{
 };
 
 pub type DependencyMapMutex = Arc<Mutex<DependencyMap>>;
+
+#[derive(Clone)]
+pub enum InstallProgress {
+    Logging,
+    Bar(Arc<ProgressBar>),
+    Both(Arc<MultiProgress>),
+}
+
+impl InstallProgress {
+    pub fn finish(&self) {
+        match self {
+            Self::Bar(pb) => pb.finish_and_clear(),
+            Self::Both(m) => {
+                let _ = m.clear();
+            }
+            Self::Logging => {}
+        }
+    }
+}
 
 pub struct PackageInfo {
     pub version_data: VersionData,
@@ -31,7 +52,7 @@ pub struct PackageInfo {
 pub struct InstallContext {
     pub client: reqwest::Client,
     pub dependency_map_mux: DependencyMapMutex,
-    pub progress: Option<Arc<ProgressBar>>,
+    pub progress: InstallProgress,
 }
 
 pub struct Installer;
@@ -139,35 +160,78 @@ impl Installer {
             let version_data = package_info.version_data;
             let stringified = package_info.stringified;
             let package_destination = PathBuf::from(CACHE_DIRECTORY.as_str()).join(&stringified);
+
+            if let Some(ref integrity) = version_data.dist.integrity {
+                if let Ok(mut map) = context.dependency_map_mux.lock() {
+                    if let Some(entry) = map.get_mut(&stringified) {
+                        entry.integrity = Some(integrity.clone());
+                    }
+                }
+            }
+
             let already_extracted = package_destination.join("package").exists();
 
             if !already_extracted {
-                let package_bytes = match HTTPRequest::get_bytes(
-                    context.client.clone(),
-                    version_data.dist.tarball.clone(),
-                )
-                .await
-                {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        eprintln!("Failed to download '{}': {}", stringified, e);
-                        return;
+                let package_bytes = {
+                    let maybe_cached = version_data
+                        .dist
+                        .integrity
+                        .as_deref()
+                        .and_then(Cache::get_tarball);
+
+                    if let Some(cached) = maybe_cached {
+                        cached
+                    } else {
+                        let bytes = match HTTPRequest::get_bytes(
+                            context.client.clone(),
+                            version_data.dist.tarball.clone(),
+                        )
+                        .await
+                        {
+                            Ok(b) => b,
+                            Err(e) => {
+                                eprintln!("Failed to download '{}': {}", stringified, e);
+                                return;
+                            }
+                        };
+                        if !version_data.dist.verify(&bytes) {
+                            eprintln!("'{}': {}", stringified, CommandError::IntegrityCheckFailed);
+                            return;
+                        }
+                        if let Some(ref integrity) = version_data.dist.integrity {
+                            let _ = Cache::store_tarball(integrity, &bytes);
+                        }
+                        bytes
                     }
                 };
-                if !version_data.dist.verify(&package_bytes) {
-                    eprintln!("'{}': {}", stringified, CommandError::IntegrityCheckFailed);
-                    return;
-                }
+
                 let strf = stringified.clone();
-                let pb = context.progress.clone();
+                let progress = context.progress.clone();
+                let store_dir = PathBuf::from(FILE_STORE_DIR.as_str());
                 TaskAllocator::add_blocking(move || {
-                    match util::extract_tarball(package_bytes, &package_destination) {
-                        Ok(_) => match pb {
-                            Some(pb) => {
+                    match util::extract_tarball_hardlinked(
+                        package_bytes,
+                        &package_destination,
+                        &store_dir,
+                    ) {
+                        Ok(_) => match progress {
+                            InstallProgress::Logging => println!("Installed '{}'", strf),
+                            InstallProgress::Bar(pb) => {
                                 pb.inc(1);
                                 pb.set_message(format!("Installed '{}'", strf));
                             }
-                            None => println!("Installed '{}'", strf),
+                            InstallProgress::Both(m) => {
+                                let pkg_pb = m.add(ProgressBar::new_spinner());
+                                pkg_pb.set_style(
+                                    ProgressStyle::with_template(
+                                        "{prefix:.bold.dim} {spinner} {wide_msg}",
+                                    )
+                                    .unwrap_or_else(|_| ProgressStyle::default_spinner())
+                                    .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+                                );
+                                pkg_pb.enable_steady_tick(Duration::from_millis(80));
+                                pkg_pb.finish_with_message(format!("Installed '{}'", strf));
+                            }
                         },
                         Err(e) => eprintln!("Failed to extract '{}': {e}", strf),
                     }
@@ -391,6 +455,42 @@ impl Installer {
         Ok(())
     }
 
+    /// Returns `true` if every package in `lockfile` has an extracted directory
+    /// in the global cache — i.e. no downloads are needed.
+    pub fn is_fully_cached(lockfile: &DependencyMap) -> bool {
+        let cache_root = PathBuf::from(CACHE_DIRECTORY.as_str());
+        lockfile.keys().all(|pkg| {
+            crate::util::is_safe_path_component(pkg)
+                && cache_root.join(pkg).join("package").exists()
+        })
+    }
+
+    /// Returns `true` if every package from `lockfile` has a corresponding
+    /// entry (symlink or directory) already present in `node_modules`.
+    pub fn node_modules_matches_lockfile(lockfile: &DependencyMap) -> bool {
+        let nm = Path::new(NODE_MODULES);
+        if !nm.exists() {
+            return false;
+        }
+        lockfile.keys().all(|pkg| {
+            let (name, _) = Versions::parse_raw_package_details(pkg.clone());
+            nm.join(&name).exists()
+        })
+    }
+
+    /// Installs all entries in `deps` (a `{name: version_range}` map as found
+    /// in `package.json`) using a single shared [`InstallContext`], so all
+    /// downloads happen in parallel under one `TaskAllocator` budget.
+    ///
+    /// Callers must invoke [`TaskAllocator::block_until_done`] after this
+    /// returns to wait for all spawned tasks to finish.
+    pub async fn install_all(
+        context: InstallContext,
+        deps: HashMap<String, String>,
+    ) -> Result<(), CommandError> {
+        Self::install_dependencies(Arc::new(Mutex::new(Vec::new())), context, deps).await
+    }
+
     pub fn write_project_lockfile(
         dependency_map_mux: DependencyMapMutex,
     ) -> Result<(), CommandError> {
@@ -407,6 +507,7 @@ impl Installer {
             merged.entry(k.clone()).or_insert_with(|| PackageLock {
                 is_latest: v.is_latest,
                 dependencies: v.dependencies.clone(),
+                integrity: v.integrity.clone(),
             });
         }
 

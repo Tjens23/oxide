@@ -14,7 +14,7 @@ pub const VALID_KEYS: &[(&str, &str)] = &[
     ),
     (
         "install-progress",
-        "Show a spinner during install instead of per-package lines (true | false)",
+        "Control install output style (logging | bar | both)",
     ),
 ];
 
