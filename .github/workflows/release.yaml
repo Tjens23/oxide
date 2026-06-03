@@ -1,50 +1,62 @@
 name: Release
 
 permissions:
-    contents: read
+  contents: read
 
 on:
-    push:
-        tags:
-            - 'v*.*.*'
-    workflow_call:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_call:
 
 jobs:
-    build:
-        uses: ./.github/workflows/build.yml
+  changelog:
+    runs-on: ubuntu-latest
+    outputs:
+      body: ${{ steps.cliff.outputs.content }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate changelog
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
 
-    changelog:
-        needs: build
-        runs-on: ubuntu-latest
-        outputs:
-            body: ${{ steps.cliff.outputs.content }}
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-            - name: Generate changelog
-              id: cliff
-              uses: orhun/git-cliff-action@v4
-              with:
-                  config: cliff.toml
-                  args: --latest --strip header
-
-    release:
-        needs: [build, changelog]
-        permissions:
-            contents: write
-        runs-on: ubuntu-latest
-        steps:
-            - name: Download artifacts
-              uses: actions/download-artifact@v4
-            - name: Upload to GitHub Release
-              uses: softprops/action-gh-release@v2
-              with:
-                  tag_name: ${{ github.ref_name }}
-                  body: ${{ needs.changelog.outputs.body }}
-                  files: |
-                      oxide-linux/oxide-linux
-                      oxide-windows.exe/oxide-windows.exe
-                      oxide-macos/oxide-macos
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build:
+    needs: changelog
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: oxide
+            asset_name: oxide-linux
+          - os: windows-latest
+            artifact_name: oxide.exe
+            asset_name: oxide-windows.exe
+          - os: macos-latest
+            artifact_name: oxide
+            asset_name: oxide-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release binary
+        run: cargo build --release
+      - name: Rename binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: mv target/release/${{ matrix.artifact_name }} target/release/${{ matrix.asset_name }}
+      - name: Rename binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: Rename-Item target/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ needs.changelog.outputs.body }}
+          files: target/release/${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
