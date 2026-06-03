@@ -1,0 +1,50 @@
+name: Release
+
+permissions:
+    contents: read
+
+on:
+    push:
+        branches: ['main']
+        tags:
+            - 'v*.*.*'
+
+jobs:
+    build:
+        uses: ./.github/workflows/build.yml
+
+    changelog:
+        needs: build
+        runs-on: ubuntu-latest
+        outputs:
+            body: ${{ steps.cliff.outputs.content }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+            - name: Generate changelog
+              id: cliff
+              uses: orhun/git-cliff-action@v4
+              with:
+                  config: cliff.toml
+                  args: --latest --strip header
+
+    release:
+        needs: [build, changelog]
+        permissions:
+            contents: write
+        runs-on: ubuntu-latest
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+            - name: Upload to GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.ref_name }}
+                  body: ${{ needs.changelog.outputs.body }}
+                  files: |
+                      oxide-linux/oxide-linux
+                      oxide-windows.exe/oxide-windows.exe
+                      oxide-macos/oxide-macos
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
