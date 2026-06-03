@@ -7,6 +7,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use indicatif::ProgressBar;
+
 use crate::util::{self, TaskAllocator};
 use crate::{
     cache::{CACHE_DIRECTORY, Cache},
@@ -29,6 +31,7 @@ pub struct PackageInfo {
 pub struct InstallContext {
     pub client: reqwest::Client,
     pub dependency_map_mux: DependencyMapMutex,
+    pub progress: Option<Arc<ProgressBar>>,
 }
 
 pub struct Installer;
@@ -156,9 +159,16 @@ impl Installer {
                     return;
                 }
                 let strf = stringified.clone();
+                let pb = context.progress.clone();
                 TaskAllocator::add_blocking(move || {
                     match util::extract_tarball(package_bytes, &package_destination) {
-                        Ok(_) => println!("Installed '{}'", strf),
+                        Ok(_) => match pb {
+                            Some(pb) => {
+                                pb.inc(1);
+                                pb.set_message(format!("Installed '{}'", strf));
+                            }
+                            None => println!("Installed '{}'", strf),
+                        },
                         Err(e) => eprintln!("Failed to extract '{}': {e}", strf),
                     }
                 });

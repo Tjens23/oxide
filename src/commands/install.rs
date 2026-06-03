@@ -5,6 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use indicatif::{ProgressBar, ProgressStyle};
 use semver::VersionReq;
 use serde_json::Value;
 
@@ -183,7 +184,22 @@ impl InstallHandler {
     }
 
     async fn execute_single(&self) -> Result<(), CommandError> {
-        println!("Installing '{}'..", self.package_name);
+        let cfg = OxideConfig::load();
+        let progress_enabled = cfg.is_true("install-progress");
+
+        let pb = if progress_enabled {
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
+                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+            );
+            pb.set_message(format!("Installing '{}'..", self.package_name));
+            pb.enable_steady_tick(std::time::Duration::from_millis(80));
+            Some(Arc::new(pb))
+        } else {
+            println!("Installing '{}'..", self.package_name);
+            None
+        };
 
         let started_at = std::time::Instant::now();
 
@@ -237,6 +253,7 @@ impl InstallHandler {
         let install_context = InstallContext {
             client,
             dependency_map_mux: Arc::clone(&dependency_map_mux),
+            progress: pb.clone(),
         };
 
         let stringified = Versions::stringify(&version_data.name, &version_data.version);
@@ -260,6 +277,10 @@ impl InstallHandler {
         )?;
 
         TaskAllocator::block_until_done();
+
+        if let Some(ref pb) = pb {
+            pb.finish_and_clear();
+        }
 
         Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
         Installer::write_project_lockfile(dependency_map_mux)?;
@@ -301,7 +322,22 @@ impl InstallHandler {
     }
 
     async fn execute_global(&self) -> Result<(), CommandError> {
-        println!("Installing '{}' globally..", self.package_name);
+        let cfg = OxideConfig::load();
+        let progress_enabled = cfg.is_true("install-progress");
+
+        let pb = if progress_enabled {
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::with_template("{spinner:.cyan} {msg} [{pos} packages]")
+                    .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+            );
+            pb.set_message(format!("Installing '{}' globally..", self.package_name));
+            pb.enable_steady_tick(std::time::Duration::from_millis(80));
+            Some(Arc::new(pb))
+        } else {
+            println!("Installing '{}' globally..", self.package_name);
+            None
+        };
 
         let started_at = std::time::Instant::now();
         let client = reqwest::Client::new();
@@ -335,6 +371,7 @@ impl InstallHandler {
             let install_context = InstallContext {
                 client,
                 dependency_map_mux: Arc::clone(&dependency_map_mux),
+                progress: pb.clone(),
             };
 
             let stringified = Versions::stringify(&version_data.name, &version_data.version);
@@ -357,6 +394,10 @@ impl InstallHandler {
                 Arc::new(Mutex::new(Vec::new())),
             )?;
             TaskAllocator::block_until_done();
+
+            if let Some(ref pb) = pb {
+                pb.finish_and_clear();
+            }
 
             Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
             Installer::write_project_lockfile(dependency_map_mux)?;

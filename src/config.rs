@@ -12,6 +12,10 @@ pub const VALID_KEYS: &[(&str, &str)] = &[
         "global-bin-dir",
         "Override the directory where global binary symlinks are created",
     ),
+    (
+        "install-progress",
+        "Show a spinner during install instead of per-package lines (true | false)",
+    ),
 ];
 
 #[derive(Debug, Default)]
