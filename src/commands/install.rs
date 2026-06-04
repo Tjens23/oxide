@@ -150,41 +150,61 @@ impl CommandHandler for InstallHandler {
 
 impl InstallHandler {
     async fn install_from_package_json(&self) -> Result<(), CommandError> {
-        use sha2::{Digest, Sha256};
-
-        let content = std::fs::read_to_string("./package.json")
+        // Build a cheap mtime+size fingerprint for package.json — no file read needed.
+        let pkgjson_meta = std::fs::metadata("./package.json")
             .map_err(CommandError::FailedToReadFile)?;
-        let json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
+        let pkgjson_mtime = pkgjson_meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let pkgjson_fingerprint = format!("{}-{}", pkgjson_meta.len(), pkgjson_mtime);
 
-        let pkgjson_hash: String = Sha256::digest(content.as_bytes())
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect();
         let nm_path = std::path::Path::new(NODE_MODULES);
-        let state_path = nm_path.join(OXIDE_STATE_FILE);
-        if let Ok(state_raw) = std::fs::read_to_string(&state_path) {
-            if let Ok(state) = serde_json::from_str::<serde_json::Value>(&state_raw) {
-                if state
-                    .get("pkgjson_hash")
-                    .and_then(|v| v.as_str())
-                    == Some(pkgjson_hash.as_str())
-                {
-                    if let Ok(lock_raw) = std::fs::read_to_string(OXIDE_LOCK) {
-                        if let Ok(lockfile) =
-                            serde_json::from_str::<DependencyMap>(&lock_raw)
-                        {
-                            if !lockfile.is_empty()
-                                && Installer::is_fully_cached(&lockfile)
-                                && Installer::node_modules_matches_lockfile(&lockfile)
-                            {
-                                println!("Already up to date.");
-                                return Ok(());
-                            }
+        // State file lives in the project root so `rm -rf node_modules` doesn't wipe it.
+        let state_path = std::path::Path::new(OXIDE_STATE_FILE);
+
+        // Fast-path: fingerprint + lockfile mtime match AND node_modules exists → nothing to do.
+        'fast_path: {
+            let Ok(state_raw) = std::fs::read_to_string(state_path) else { break 'fast_path };
+            let Ok(state) = serde_json::from_str::<serde_json::Value>(&state_raw) else { break 'fast_path };
+
+            let stored_fp = state.get("pkgjson_fingerprint").and_then(|v| v.as_str());
+            if stored_fp != Some(pkgjson_fingerprint.as_str()) {
+                break 'fast_path;
+            }
+
+            let stored_lock_mtime = state.get("lockfile_mtime").and_then(|v| v.as_u64());
+            let current_lock_mtime = std::fs::metadata(OXIDE_LOCK)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_nanos() as u64);
+
+            if stored_lock_mtime.is_some() && stored_lock_mtime == current_lock_mtime {
+                if nm_path.exists() {
+                    println!("Already up to date.");
+                    return Ok(());
+                }
+                // Lockfile is valid but node_modules was deleted — re-link without re-resolving.
+                if let Ok(lock_raw) = std::fs::read_to_string(OXIDE_LOCK) {
+                    if let Ok(lockfile) = serde_json::from_str::<DependencyMap>(&lock_raw) {
+                        if !lockfile.is_empty() {
+                            let started_at = std::time::Instant::now();
+                            Installer::create_modules_dir()?;
+                            Cache::link_all_to_node_modules(&lockfile, nm_path)?;
+                            println!("Done in {:.2}s", started_at.elapsed().as_secs_f64());
+                            return Ok(());
                         }
                     }
                 }
             }
         }
+
+        let content = std::fs::read_to_string("./package.json")
+            .map_err(CommandError::FailedToReadFile)?;
+        let json: Value = serde_json::from_str(&content).map_err(CommandError::ParsingFailed)?;
 
         let dep_obj = json
             .get("dependencies")
@@ -283,10 +303,18 @@ impl InstallHandler {
         }
 
         // Write the oxide-state sidecar so the next run can take the fast path.
-        let state = serde_json::json!({ "pkgjson_hash": pkgjson_hash });
+        let lock_mtime_after = std::fs::metadata(OXIDE_LOCK)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_nanos() as u64);
+        let mut state_val = serde_json::json!({ "pkgjson_fingerprint": pkgjson_fingerprint });
+        if let Some(mtime) = lock_mtime_after {
+            state_val["lockfile_mtime"] = serde_json::json!(mtime);
+        }
         let _ = std::fs::write(
-            &state_path,
-            serde_json::to_string(&state).unwrap_or_default(),
+            state_path,
+            serde_json::to_string(&state_val).unwrap_or_default(),
         );
 
         self.note_ignore_scripts();

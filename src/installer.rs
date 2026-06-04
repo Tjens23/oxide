@@ -2,6 +2,7 @@ use semver::VersionReq;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -13,7 +14,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::util::{self, TaskAllocator};
 use crate::{
-    cache::{CACHE_DIRECTORY, FILE_STORE_DIR, Cache},
+    cache::{CACHE_DIRECTORY, CACHED_VERSIONS, FILE_STORE_DIR, Cache},
     constants::{NODE_MODULES, OXIDE_LOCK},
     errors::CommandError::{self},
     http::HTTPRequest,
@@ -263,18 +264,53 @@ impl Installer {
                     continue;
                 }
             };
-            let req = Some(&req);
+            let req_ref = Some(&req);
+            let full_version = Versions::resolve_full_version(req_ref);
 
-            let full_version = Versions::resolve_full_version(req);
-            let full_version = full_version.as_ref();
-
-            let (is_cached, cached_version) = match Cache::exists(&name, full_version, req).await {
-                Ok(result) => result,
-                Err(e) => {
-                    eprintln!("Warning: failed to check cache for '{}': {}", name, e);
-                    continue;
-                }
+            // Fast path: check the in-memory CACHED_VERSIONS map — zero disk I/O.
+            let in_memory_hit: Option<String> = match full_version.as_deref() {
+                Some(v) if v != LATEST => CACHED_VERSIONS
+                    .get(&name)
+                    .filter(|cv| cv.version == v)
+                    .map(|cv| cv.version.clone()),
+                _ => CACHED_VERSIONS.get(&name).and_then(|cv| {
+                    let ver = semver::Version::from_str(&cv.version).ok()?;
+                    if req_ref.map_or(true, |r| r.matches(&ver)) {
+                        Some(cv.version.clone())
+                    } else {
+                        None
+                    }
+                }),
             };
+
+            if let Some(cached_ver) = in_memory_hit {
+                // Spawn symlink creation in parallel instead of blocking the loop.
+                let parents_clone = Arc::clone(&parents_mux);
+                let ctx_clone = context.clone();
+                let name_owned = name.clone();
+                TaskAllocator::add_blocking(move || {
+                    if let Err(e) = Self::install_cached_dep(
+                        &parents_clone,
+                        &ctx_clone,
+                        Some(cached_ver),
+                        &name_owned,
+                    ) {
+                        eprintln!("Warning: failed to link cached '{}': {}", name_owned, e);
+                    }
+                });
+                continue;
+            }
+
+            // Slow path: not in memory — fall back to async disk scan / network.
+            let full_version_ref = full_version.as_ref();
+            let (is_cached, cached_version) =
+                match Cache::exists(&name, full_version_ref, req_ref).await {
+                    Ok(result) => result,
+                    Err(e) => {
+                        eprintln!("Warning: failed to check cache for '{}': {}", name, e);
+                        continue;
+                    }
+                };
 
             if is_cached {
                 Self::install_cached_dep(&parents_mux, &context, cached_version, &name)?;
@@ -284,8 +320,8 @@ impl Installer {
             let version_data = match Self::get_version_data(
                 context.client.clone(),
                 &name,
-                full_version,
-                req,
+                full_version_ref,
+                req_ref,
             )
             .await
             {
@@ -453,29 +489,6 @@ impl Installer {
             }
         }
         Ok(())
-    }
-
-    /// Returns `true` if every package in `lockfile` has an extracted directory
-    /// in the global cache — i.e. no downloads are needed.
-    pub fn is_fully_cached(lockfile: &DependencyMap) -> bool {
-        let cache_root = PathBuf::from(CACHE_DIRECTORY.as_str());
-        lockfile.keys().all(|pkg| {
-            crate::util::is_safe_path_component(pkg)
-                && cache_root.join(pkg).join("package").exists()
-        })
-    }
-
-    /// Returns `true` if every package from `lockfile` has a corresponding
-    /// entry (symlink or directory) already present in `node_modules`.
-    pub fn node_modules_matches_lockfile(lockfile: &DependencyMap) -> bool {
-        let nm = Path::new(NODE_MODULES);
-        if !nm.exists() {
-            return false;
-        }
-        lockfile.keys().all(|pkg| {
-            let (name, _) = Versions::parse_raw_package_details(pkg.clone());
-            nm.join(&name).exists()
-        })
     }
 
     /// Installs all entries in `deps` (a `{name: version_range}` map as found

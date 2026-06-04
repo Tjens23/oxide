@@ -2,14 +2,16 @@ use crate::errors::CommandError;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use bytes::Bytes;
 use flate2::bufread::GzDecoder;
+use lazy_static::lazy_static;
 use sha2::{Digest, Sha256, Sha512};
 use std::{
     future::Future,
     io::Read,
     path::Path,
-    sync::atomic::{AtomicUsize, Ordering},
-    thread::{self},
-    time::Duration,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Condvar, Mutex,
+    },
 };
 use tar::Archive;
 use tokio::task::JoinHandle;
@@ -194,6 +196,10 @@ pub fn extract_tarball_strip(bytes: Bytes, dest: &str) -> Result<(), CommandErro
 
 pub static ACTIVE_TASKS: AtomicUsize = AtomicUsize::new(0);
 
+lazy_static! {
+    static ref DONE_SIGNAL: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
+}
+
 pub struct TaskAllocator;
 
 impl TaskAllocator {
@@ -226,9 +232,12 @@ impl TaskAllocator {
     }
 
     pub fn block_until_done() {
-        while Self::task_count() != 0 {
-            thread::sleep(Duration::from_millis(1));
+        if Self::task_count() == 0 {
+            return;
         }
+        let (lock, cvar) = &*DONE_SIGNAL;
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        drop(cvar.wait_while(guard, |_| Self::task_count() != 0));
     }
 
     fn increment_tasks() {
@@ -236,7 +245,12 @@ impl TaskAllocator {
     }
 
     fn decrement_tasks() {
-        ACTIVE_TASKS.fetch_sub(1, Ordering::SeqCst);
+        let prev = ACTIVE_TASKS.fetch_sub(1, Ordering::SeqCst);
+        if prev == 1 {
+            let (lock, cvar) = &*DONE_SIGNAL;
+            let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            cvar.notify_all();
+        }
     }
 
     fn task_count() -> usize {
