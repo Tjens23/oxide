@@ -12,6 +12,10 @@ pub struct UpgradeHandler {
 
 impl UpgradeHandler {
     fn remove_from_node_modules(package_name: &str) -> Result<(), CommandError> {
+        // Validate before using the name as a path component (CWE-022).
+        if !crate::util::is_safe_path_component(package_name) {
+            return Err(CommandError::MalformedPackageId(package_name.to_string()));
+        }
         let path = format!("./node_modules/{}", package_name);
         if std::path::Path::new(&path).exists() {
             std::fs::remove_dir_all(&path).map_err(CommandError::FailedToWriteFile)?;

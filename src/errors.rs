@@ -61,4 +61,8 @@ pub enum CommandError {
     ConfigDirUnavailable,
     #[error("unsafe or malformed package identifier: {0}")]
     MalformedPackageId(String),
+    #[error("URL must use HTTPS to prevent plaintext transmission: {0}")]
+    InsecureUrl(String),
+    #[error("response body too large ({0} bytes); refusing to buffer")]
+    ResponseTooLarge(u64),
 }

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::util;
 #[derive(Debug, Deserialize)]
 pub struct VersionData {
     pub name: String,
@@ -19,14 +20,28 @@ pub struct Dist {
 
 impl Dist {
     pub fn verify(&self, bytes: &bytes::Bytes) -> bool {
-        use crate::util;
         if let Some(ref integrity) = self.integrity {
-            util::verify_integrity(bytes, integrity)
-        } else if let Some(ref shasum) = self.shasum {
-            util::verify_shasum(bytes, shasum)
-        } else {
-            true
+            // sha512 integrity is the only algorithm we accept (CWE-327).
+            return util::verify_integrity(bytes, integrity);
         }
+        if self.shasum.is_some() {
+            // SHA-1 is cryptographically broken and vulnerable to collision
+            // attacks. Packages that only advertise a SHA-1 checksum and no
+            // sha512 integrity field are rejected rather than verified with a
+            // broken algorithm (CWE-327).
+            eprintln!(
+                "Security warning: package provides only a SHA-1 checksum (no sha512 integrity \
+                 field). Installation refused to avoid accepting a potentially tampered package."
+            );
+            return false;
+        }
+        // No integrity data at all — refuse rather than silently trusting the
+        // bytes (was previously returning `true`, which skipped all checks).
+        eprintln!(
+            "Security warning: package provides no integrity data. \
+             Installation refused."
+        );
+        false
     }
 }
 

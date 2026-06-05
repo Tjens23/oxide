@@ -259,17 +259,31 @@ pub fn resolve_binary(
 
     let short_name = package_name.split('/').next_back().unwrap_or(package_name);
 
+    // Validates a bin-field relative path: strips the leading "./" that npm
+    // conventionally includes, then rejects anything containing ".." or a
+    // root component (CWE-022 — path traversal via package.json bin field).
+    let safe_bin_path = |rel: &str| -> Result<String, CommandError> {
+        let rel = rel.trim_start_matches("./");
+        if !crate::util::is_safe_path_component(rel) {
+            return Err(CommandError::MalformedPackageId(format!(
+                "unsafe bin path in package.json: {}",
+                rel
+            )));
+        }
+        Ok(format!("{}/{}", package_dir, rel))
+    };
+
     match json.get("bin") {
         Some(Value::String(rel)) => {
-            return Ok(format!("{}/{}", package_dir, rel.trim_start_matches("./")));
+            return safe_bin_path(rel);
         }
         Some(Value::Object(map)) => {
             let key = binary_override.unwrap_or(short_name);
             if let Some(Value::String(rel)) = map.get(key) {
-                return Ok(format!("{}/{}", package_dir, rel.trim_start_matches("./")));
+                return safe_bin_path(rel);
             }
             if let Some((_, Value::String(rel))) = map.iter().next() {
-                return Ok(format!("{}/{}", package_dir, rel.trim_start_matches("./")));
+                return safe_bin_path(rel);
             }
         }
         _ => {}

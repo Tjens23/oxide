@@ -255,12 +255,26 @@ fn save_token(token: &str) -> Result<(), CommandError> {
     {
         return Ok(());
     }
-    // Fall back to credentials file
+    // Fall back to credentials file when the OS keyring is unavailable.
+    // WARNING (CWE-312): the token is stored as plaintext on disk. Protect
+    // this file with appropriate filesystem permissions (0600 on Unix). The
+    // OS keyring is strongly preferred and will be used whenever available.
+    eprintln!(
+        "Warning: OS keyring unavailable — token stored as plaintext in the credentials file. \
+         Ensure the file is readable only by your user account."
+    );
     let path = credentials_file().ok_or_else(|| {
         CommandError::FailedToWriteFile(std::io::Error::other("cannot determine config directory"))
     })?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(CommandError::FailedToWriteFile)?;
     }
-    std::fs::write(&path, token).map_err(CommandError::FailedToWriteFile)
+    // Write the file and then restrict permissions to owner-read-write only.
+    std::fs::write(&path, token).map_err(CommandError::FailedToWriteFile)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
 }
