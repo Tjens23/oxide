@@ -334,23 +334,36 @@ impl Cache {
         dependency_map: &DependencyMap,
         nm_path: &std::path::Path,
     ) -> Result<(), CommandError> {
+        use rayon::prelude::*;
+
         let cache_root = PathBuf::from(CACHE_DIRECTORY.as_str());
+
+        let mut scope_dirs: HashSet<PathBuf> = HashSet::new();
         for pkg_at_ver in dependency_map.keys() {
             if !crate::util::is_safe_path_component(pkg_at_ver) {
                 continue;
             }
             let (pkg_name, _) = Versions::parse_raw_package_details(pkg_at_ver.clone());
-            let src = cache_root.join(pkg_at_ver).join("package");
-            let dest = nm_path.join(&pkg_name);
-            if let Some(parent) = dest.parent() {
-                fs_sync::create_dir_all(parent).map_err(CommandError::FailedToCreateFile)?;
-            }
-            match crate::util::create_dir_link(&src, &dest) {
-                Ok(_) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(CommandError::FailedToCreateFile(e)),
+            if let Some(slash) = pkg_name.rfind('/') {
+                scope_dirs.insert(nm_path.join(&pkg_name[..slash]));
             }
         }
-        Ok(())
+        for scope_dir in &scope_dirs {
+            fs_sync::create_dir_all(scope_dir).map_err(CommandError::FailedToCreateFile)?;
+        }
+
+        dependency_map.par_iter().try_for_each(|(pkg_at_ver, _)| {
+            if !crate::util::is_safe_path_component(pkg_at_ver) {
+                return Ok(());
+            }
+            let (pkg_name, _) = Versions::parse_raw_package_details(pkg_at_ver.clone());
+            let src = cache_root.join(pkg_at_ver).join("package");
+            let dest = nm_path.join(&pkg_name);
+            match crate::util::create_dir_link(&src, &dest) {
+                Ok(_) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+                Err(e) => Err(CommandError::FailedToCreateFile(e)),
+            }
+        })
     }
 }
