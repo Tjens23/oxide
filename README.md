@@ -1,7 +1,7 @@
 # Oxide
 
 <p align="center">
-  <img width="474" height="378" alt="logo" src="https://github.com/user-attachments/assets/274d668c-7e40-4351-a518-bf68c2984228" />
+  <img width="474" height="378" alt="logo" src="./oxide-logo.png" />
 </p>
 
 A fast, cache-first Node.js package manager written in Rust.
