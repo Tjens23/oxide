@@ -74,13 +74,16 @@ impl CommandHandler for ConfigHandler {
                 let cfg = OxideConfig::load();
                 println!("{:<20} {:<40} Value", "Key", "Description");
                 println!("{}", "-".repeat(75));
-                for (key, desc) in VALID_KEYS {
+                for (key, desc, _) in VALID_KEYS {
                     let value = cfg.get(key).unwrap_or("(not set)");
                     println!("{:<20} {:<40} {}", key, desc, value);
                 }
             }
 
             ConfigSubcommand::Get { key } => {
+                if !VALID_KEYS.iter().any(|(k, _, _)| k == key) {
+                    return Err(CommandError::UnknownConfigKey(key.clone()));
+                }
                 let cfg = OxideConfig::load();
                 match cfg.get(key) {
                     Some(v) => println!("{}", v),
@@ -96,6 +99,9 @@ impl CommandHandler for ConfigHandler {
             }
 
             ConfigSubcommand::Delete { key } => {
+                if !VALID_KEYS.iter().any(|(k, _, _)| k == key) {
+                    return Err(CommandError::UnknownConfigKey(key.clone()));
+                }
                 let mut cfg = OxideConfig::load();
                 if cfg.delete(key) {
                     cfg.save().map_err(CommandError::ConfigWriteFailed)?;
