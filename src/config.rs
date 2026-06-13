@@ -2,20 +2,11 @@ use std::{collections::HashMap, io, path::PathBuf};
 
 use crate::{constants::CONFIG_FILE, errors::CommandError};
 
-pub const VALID_KEYS: &[(&str, &str)] = &[
-    (
-        "ignore-scripts",
-        "Skip lifecycle scripts on install (true | false)",
-    ),
-    ("registry", "npm registry base URL"),
-    (
-        "global-bin-dir",
-        "Override the directory where global binary symlinks are created",
-    ),
-    (
-        "install-progress",
-        "Control install output style (logging | bar | both)",
-    ),
+pub static VALID_KEYS: &[(&str, &str, Option<&[&str]>)] = &[
+    ("ignore-scripts", "Skip lifecycle scripts on install (true | false)", Some(&["true", "false"])),
+    ("registry", "npm registry base URL", None),
+    ("global-bin-dir", "Override the directory where global binary symlinks are created", None),
+    ("install-progress", "Control install output style (logging | bar | both)", Some(&["logging", "bar", "both"])),
 ];
 
 #[derive(Debug, Default)]
@@ -67,9 +58,37 @@ impl OxideConfig {
     }
 
     pub fn set(&mut self, key: &str, value: String) -> Result<(), CommandError> {
-        if !VALID_KEYS.iter().any(|(k, _)| *k == key) {
-            return Err(CommandError::UnknownConfigKey(key.to_owned()));
+        let entry = VALID_KEYS.iter().find(|(k, _, _)| *k == key);
+        let (_, _, allowed_values) = entry.ok_or_else(|| CommandError::UnknownConfigKey(key.to_owned()))?;
+
+        match key {
+            "registry" => {
+                if !value.starts_with("https://") {
+                    return Err(CommandError::InsecureUrl(value));
+                }
+            }
+            "global-bin-dir" => {
+                if value.trim().is_empty() {
+                    return Err(CommandError::InvalidConfigValue {
+                        key: key.to_owned(),
+                        value,
+                        allowed: "non-empty path".to_owned(),
+                    });
+                }
+            }
+            _ => {}
         }
+
+        if let Some(allowed) = allowed_values {
+            if !allowed.contains(&value.as_str()) {
+                return Err(CommandError::InvalidConfigValue {
+                    key: key.to_owned(),
+                    allowed: allowed.join(", "),
+                    value,
+                });
+            }
+        }
+
         self.0.insert(key.to_owned(), value);
         Ok(())
     }

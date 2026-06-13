@@ -53,6 +53,12 @@ pub enum CommandError {
     MutexPoisoned,
     #[error("unknown config key '{0}'; run 'oxide config list' to see valid keys")]
     UnknownConfigKey(String),
+    #[error("invalid value '{value}' for '{key}'; allowed: {allowed}")]
+    InvalidConfigValue {
+        key: String,
+        value: String,
+        allowed: String,
+    },
     #[error("failed to write config ({0})")]
     ConfigWriteFailed(Error),
     #[error("failed to spawn process: {0}")]

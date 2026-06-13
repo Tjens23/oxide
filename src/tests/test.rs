@@ -632,3 +632,115 @@ mod integrity_tests {
         assert!(!verify_integrity(&bytes, "sha512-!!!!!!")); // invalid base64
     }
 }
+
+#[cfg(test)]
+mod config_validation_tests {
+    use crate::config::OxideConfig;
+    use crate::errors::CommandError;
+
+    fn fresh_cfg() -> OxideConfig {
+        OxideConfig::default()
+    }
+
+    // install-progress: valid values
+    #[test]
+    fn test_config_set_install_progress_logging() {
+        assert!(fresh_cfg().set("install-progress", "logging".into()).is_ok());
+    }
+
+    #[test]
+    fn test_config_set_install_progress_bar() {
+        assert!(fresh_cfg().set("install-progress", "bar".into()).is_ok());
+    }
+
+    #[test]
+    fn test_config_set_install_progress_both() {
+        assert!(fresh_cfg().set("install-progress", "both".into()).is_ok());
+    }
+
+    // install-progress: invalid value
+    #[test]
+    fn test_config_set_install_progress_invalid() {
+        let err = fresh_cfg()
+            .set("install-progress", "foobar".into())
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::InvalidConfigValue { ref key, ref value, .. }
+                if key == "install-progress" && value == "foobar"),
+            "unexpected error: {err}"
+        );
+    }
+
+    // ignore-scripts: valid values
+    #[test]
+    fn test_config_set_ignore_scripts_true() {
+        assert!(fresh_cfg().set("ignore-scripts", "true".into()).is_ok());
+    }
+
+    #[test]
+    fn test_config_set_ignore_scripts_false() {
+        assert!(fresh_cfg().set("ignore-scripts", "false".into()).is_ok());
+    }
+
+    // ignore-scripts: invalid value
+    #[test]
+    fn test_config_set_ignore_scripts_invalid() {
+        let err = fresh_cfg()
+            .set("ignore-scripts", "yes".into())
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::InvalidConfigValue { ref key, .. } if key == "ignore-scripts"),
+            "unexpected error: {err}"
+        );
+    }
+
+    // registry: HTTPS accepted
+    #[test]
+    fn test_config_set_registry_https() {
+        assert!(fresh_cfg()
+            .set("registry", "https://registry.npmjs.org".into())
+            .is_ok());
+    }
+
+    // registry: HTTP rejected
+    #[test]
+    fn test_config_set_registry_http_rejected() {
+        let err = fresh_cfg()
+            .set("registry", "http://registry.example.com".into())
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::InsecureUrl(_)),
+            "unexpected error: {err}"
+        );
+    }
+
+    // global-bin-dir: valid non-empty path
+    #[test]
+    fn test_config_set_global_bin_dir_valid() {
+        assert!(fresh_cfg()
+            .set("global-bin-dir", "/usr/local/bin".into())
+            .is_ok());
+    }
+
+    // global-bin-dir: empty string rejected
+    #[test]
+    fn test_config_set_global_bin_dir_empty_rejected() {
+        let err = fresh_cfg()
+            .set("global-bin-dir", "".into())
+            .unwrap_err();
+        assert!(
+            matches!(err, CommandError::InvalidConfigValue { ref key, .. } if key == "global-bin-dir"),
+            "unexpected error: {err}"
+        );
+    }
+
+    // Unknown key rejected for set
+    #[test]
+    fn test_config_set_unknown_key_rejected() {
+        let err = fresh_cfg().set("no-such-key", "value".into()).unwrap_err();
+        assert!(
+            matches!(err, CommandError::UnknownConfigKey(ref k) if k == "no-such-key"),
+            "unexpected error: {err}"
+        );
+    }
+}
