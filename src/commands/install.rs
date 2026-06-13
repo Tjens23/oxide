@@ -554,10 +554,27 @@ impl InstallHandler {
                 .join(&stringified)
                 .join("package")
                 .join(OXIDE_LOCK);
+
+            let pkg_json_path = PathBuf::from(CACHE_DIRECTORY.as_str())
+                .join(&stringified)
+                .join("package")
+                .join("package.json");
+
+            let has_declared_deps = std::fs::read_to_string(&pkg_json_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+                .map(|v| {
+                    ["dependencies", "optionalDependencies", "peerDependencies"]
+                        .into_iter()
+                        .filter_map(|k| v.get(k).and_then(|d| d.as_object()).map(|o| !o.is_empty()))
+                        .any(|b| b)
+                })
+                .unwrap_or(true);
+
             let lockfile_complete = std::fs::read_to_string(&lockfile_path)
                 .ok()
                 .and_then(|raw| serde_json::from_str::<crate::types::PackageLock>(&raw).ok())
-                .map(|lf| !lf.dependencies.is_empty())
+                .map(|lf| !has_declared_deps || !lf.dependencies.is_empty())
                 .unwrap_or(false);
             if lockfile_complete {
                 progress.finish();
