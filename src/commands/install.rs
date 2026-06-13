@@ -545,11 +545,79 @@ impl InstallHandler {
         std::fs::create_dir_all(&global_bin).map_err(CommandError::FailedToCreateFile)?;
 
         let (resolved_name, resolved_version) = if is_cached {
-            progress.finish();
             let version = cached_version.ok_or(CommandError::InvalidVersion)?;
+            if !crate::util::is_safe_path_component(&version) {
+                return Err(CommandError::MalformedPackageId(version));
+            }
             let stringified = Versions::stringify(&self.package_name, &version);
-            Cache::load_cached_version(stringified, &global_nm)?;
-            (self.package_name.clone(), version)
+            let lockfile_path = PathBuf::from(CACHE_DIRECTORY.as_str())
+                .join(&stringified)
+                .join("package")
+                .join(OXIDE_LOCK);
+
+            let pkg_json_path = PathBuf::from(CACHE_DIRECTORY.as_str())
+                .join(&stringified)
+                .join("package")
+                .join("package.json");
+
+            let has_declared_deps = std::fs::read_to_string(&pkg_json_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+                .map(|v| {
+                    ["dependencies", "optionalDependencies", "peerDependencies"]
+                        .into_iter()
+                        .filter_map(|k| v.get(k).and_then(|d| d.as_object()).map(|o| !o.is_empty()))
+                        .any(|b| b)
+                })
+                .unwrap_or(true);
+
+            let lockfile_complete = std::fs::read_to_string(&lockfile_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<crate::types::PackageLock>(&raw).ok())
+                .map(|lf| !has_declared_deps || !lf.dependencies.is_empty())
+                .unwrap_or(false);
+            if lockfile_complete {
+                progress.finish();
+                Cache::load_cached_version(stringified, &global_nm)?;
+                (self.package_name.clone(), version)
+            } else {
+                // Cache entry is incomplete — fall through to fresh install
+                let version_data = Installer::get_version_data(
+                    client.clone(),
+                    &self.package_name,
+                    full_version,
+                    semantic_version,
+                )
+                .await?;
+
+                let dependency_map_mux = Arc::new(Mutex::new(HashMap::new()));
+                let install_context = InstallContext {
+                    client,
+                    dependency_map_mux: Arc::clone(&dependency_map_mux),
+                    progress: progress.clone(),
+                };
+                let stringified = Versions::stringify(&version_data.name, &version_data.version);
+                let resolved_name = version_data.name.clone();
+                let resolved_version = version_data.version.clone();
+                if !crate::util::is_safe_path_component(&stringified) {
+                    return Err(CommandError::MalformedPackageId(stringified));
+                }
+                let package_info = PackageInfo {
+                    version_data,
+                    is_latest: Versions::is_latest(full_version),
+                    stringified: stringified.to_string(),
+                };
+                Installer::install_package(
+                    install_context,
+                    package_info,
+                    Arc::new(Mutex::new(Vec::new())),
+                )?;
+                TaskAllocator::block_until_done();
+                progress.finish();
+                Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
+                Cache::load_cached_version(stringified, &global_nm)?;
+                (resolved_name, resolved_version)
+            }
         } else {
             let version_data = Installer::get_version_data(
                 client.clone(),
@@ -611,7 +679,6 @@ impl InstallHandler {
             progress.finish();
 
             Installer::setup_cache_packages(Arc::clone(&dependency_map_mux))?;
-            Installer::write_project_lockfile(dependency_map_mux)?;
             Cache::load_cached_version(stringified, &global_nm)?;
             (resolved_name, resolved_version)
         };

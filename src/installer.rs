@@ -170,7 +170,7 @@ impl Installer {
                 }
             }
 
-            let already_extracted = package_destination.join("package").exists();
+            let already_extracted = package_destination.join("package").join("package.json").exists();
 
             if !already_extracted {
                 let package_bytes = {
@@ -209,10 +209,11 @@ impl Installer {
                 let strf = stringified.clone();
                 let progress = context.progress.clone();
                 let store_dir = PathBuf::from(FILE_STORE_DIR.as_str());
+                let extract_dest = package_destination.join("package");
                 TaskAllocator::add_blocking(move || {
                     match util::extract_tarball_hardlinked(
                         package_bytes,
-                        &package_destination,
+                        &extract_dest,
                         &store_dir,
                     ) {
                         Ok(_) => match progress {
@@ -363,21 +364,6 @@ impl Installer {
             stringified.clone(),
             Arc::clone(&context.dependency_map_mux),
         )?;
-
-        let in_dep_map = context
-            .dependency_map_mux
-            .lock()
-            .map_err(|_| CommandError::MutexPoisoned)?
-            .contains_key(stringified.as_str());
-
-        if !in_dep_map
-            && let Err(e) = Cache::load_cached_version(
-                stringified,
-                std::path::Path::new(crate::constants::NODE_MODULES),
-            )
-        {
-            eprintln!("Warning: failed to load cached package: {e}");
-        }
 
         Ok(())
     }
