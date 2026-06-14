@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::process::Command;
 
 use async_trait::async_trait;
+use console::style;
 use serde::Deserialize;
 
 use crate::{
@@ -196,27 +197,28 @@ impl RunHandler {
             let Some(cmd) = cmd_str else {
                 println!(
                     "\n[{}] script '{}' not found — skipping",
-                    pkg.name, script_name
+                    style(&pkg.name).cyan().bold(),
+                    script_name
                 );
                 continue;
             };
 
-            println!("\n[{}] $ {}", pkg.name, cmd);
+            println!("\n[{}] $ {}", style(&pkg.name).cyan().bold(), style(cmd).dim());
 
             let status = workspace::run_script_in_dir(&pkg.path, cmd, &self.script_args)?;
 
             if !status.success() {
                 let code = status.code().unwrap_or(1);
-                println!("[{}] exited with code {}", pkg.name, code);
+                println!("{}", style(format!("[{}] exited with code {}", pkg.name, code)).red());
                 failures += 1;
             }
         }
 
         println!();
         if failures == 0 {
-            println!("{}/{} packages succeeded.", total, total);
+            println!("{}", style(format!("{}/{} packages succeeded.", total, total)).green());
         } else {
-            println!("{} of {} package(s) failed.", failures, total);
+            println!("{}", style(format!("{} of {} package(s) failed.", failures, total)).red());
         }
 
         Ok(())

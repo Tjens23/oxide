@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use console::{Alignment, pad_str, style};
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -77,21 +78,36 @@ impl CommandHandler for OutdatedHandler {
         }
 
         if outdated.is_empty() {
-            println!("All packages are up to date.");
+            println!("{}", style("All packages are up to date.").green());
             return Ok(());
         }
 
         outdated.sort_by(|a, b| a.name.cmp(&b.name));
 
-        println!("{:<30} {:<15} Latest", "Package", "Current");
-        println!("{}", "-".repeat(60));
+        let pkg_hdr = format!("{}", style("Package").bold());
+        let cur_hdr = format!("{}", style("Current").bold());
+        let lat_hdr = format!("{}", style("Latest").bold());
+        println!(
+            "{} {} {}",
+            pad_str(&pkg_hdr, 30, Alignment::Left, None),
+            pad_str(&cur_hdr, 15, Alignment::Left, None),
+            lat_hdr
+        );
+        println!("{}", style("-".repeat(60)).dim());
 
         for status in &outdated {
-            let current = status.current.as_deref().unwrap_or("—");
-            println!("{:<30} {:<15} {}", status.name, current, status.latest);
+            let current_str = status.current.as_deref().unwrap_or("\u{2014}");
+            let current_colored = format!("{}", style(current_str).yellow());
+            let latest_colored = format!("{}", style(&status.latest).green());
+            println!(
+                "{} {} {}",
+                pad_str(&status.name, 30, Alignment::Left, None),
+                pad_str(&current_colored, 15, Alignment::Left, None),
+                latest_colored
+            );
         }
 
-        println!("\n{} package(s) outdated.", outdated.len());
+        println!("\n{}", style(format!("{} package(s) outdated.", outdated.len())).yellow());
 
         Ok(())
     }

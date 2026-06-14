@@ -22,7 +22,7 @@ fn main() {
     // Synchronous pre-flight: if this is a bare `oxide install` and nothing
     // has changed, exit before touching the keyring or the tokio runtime.
     if try_install_noop_fastpath() {
-        println!("Already up to date.");
+        println!("{}", console::style("Already up to date.").green());
         return;
     }
 
@@ -48,7 +48,7 @@ fn main() {
     runtime.block_on(async {
         let parse_result = command_handler::handle_args(env::args()).await;
         if let Err(err) = parse_result {
-            println!("Failed to parse command: {err}");
+            println!("{} {err}", console::style("Failed to parse command:").red().bold());
         }
     });
 }

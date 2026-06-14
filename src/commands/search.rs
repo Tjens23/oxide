@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use console::style;
 
 use crate::errors::{CommandError, ParseError};
 use crate::http::HTTPRequest;
@@ -57,7 +58,7 @@ impl CommandHandler for SearchHandler {
         let result = HTTPRequest::search(client, &self.query, self.limit, self.from).await?;
 
         if result.objects.is_empty() {
-            println!("No packages found matching '{}'.", self.query);
+            println!("{}", style(format!("No packages found matching '{}'.", self.query)).yellow());
             return Ok(());
         }
 
@@ -65,19 +66,34 @@ impl CommandHandler for SearchHandler {
             let pkg = &obj.package;
             let description = pkg.description.as_deref().unwrap_or("");
             if description.is_empty() {
-                println!("• {}@{}", pkg.name, pkg.version);
+                println!(
+                    "{}  {}{}",
+                    style("•").dim(),
+                    style(&pkg.name).bold(),
+                    style(format!("@{}", pkg.version)).dim()
+                );
             } else {
-                println!("• {}@{} — {}", pkg.name, pkg.version, description);
+                println!(
+                    "{}  {}{} — {}",
+                    style("•").dim(),
+                    style(&pkg.name).bold(),
+                    style(format!("@{}", pkg.version)).dim(),
+                    description
+                );
             }
         }
 
         let showing = result.objects.len();
         println!(
-            "\nShowing {}-{} of {} result{}.",
-            self.from + 1,
-            self.from as usize + showing,
-            result.total,
-            if result.total == 1 { "" } else { "s" }
+            "\n{}",
+            style(format!(
+                "Showing {}-{} of {} result{}.",
+                self.from + 1,
+                self.from as usize + showing,
+                result.total,
+                if result.total == 1 { "" } else { "s" }
+            ))
+            .dim()
         );
 
         Ok(())
