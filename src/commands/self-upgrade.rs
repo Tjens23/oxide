@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use console::style;
 use serde::Deserialize;
 
 use crate::errors::{CommandError, ParseError};
@@ -49,7 +50,7 @@ impl CommandHandler for SelfUpgradeHandler {
         let latest_version = latest_tag.trim_start_matches('v');
 
         if latest_version == CURRENT_VERSION {
-            println!("oxide is already up to date (v{}).", CURRENT_VERSION);
+            println!("{}", style(format!("oxide is already up to date (v{}).", CURRENT_VERSION)).green());
             return Ok(());
         }
 
@@ -135,7 +136,7 @@ impl CommandHandler for SelfUpgradeHandler {
             std::fs::rename(&temp_path, &current_exe).map_err(CommandError::FailedToWriteFile)?;
         }
 
-        println!("oxide upgraded to {} successfully.", latest_tag);
+        println!("{}", style(format!("oxide upgraded to {} successfully.", latest_tag)).green());
         Ok(())
     }
 }

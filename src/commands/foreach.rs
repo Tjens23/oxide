@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use console::style;
 use serde_json::Value;
 
 use crate::{
@@ -102,18 +103,19 @@ impl CommandHandler for ForeachHandler {
             let Some(cmd) = script_cmd else {
                 println!(
                     "\n[{}] script '{}' not found — skipping",
-                    pkg.name, self.script
+                    style(&pkg.name).cyan().bold(),
+                    self.script
                 );
                 continue;
             };
 
-            println!("\n[{}] $ {}", pkg.name, cmd);
+            println!("\n[{}] $ {}", style(&pkg.name).cyan().bold(), style(cmd).dim());
 
             let status = workspace::run_script_in_dir(&pkg.path, cmd, &self.script_args)?;
 
             if !status.success() {
                 let code = status.code().unwrap_or(1);
-                println!("[{}] exited with code {}", pkg.name, code);
+                println!("{}", style(format!("[{}] exited with code {}", pkg.name, code)).red());
                 failures += 1;
                 if self.bail {
                     return Err(CommandError::ProcessFailed(format!(
@@ -126,9 +128,9 @@ impl CommandHandler for ForeachHandler {
 
         println!();
         if failures == 0 {
-            println!("{}/{} packages succeeded.", total, total);
+            println!("{}", style(format!("{}/{} packages succeeded.", total, total)).green());
         } else {
-            println!("{} of {} package(s) failed.", failures, total);
+            println!("{}", style(format!("{} of {} package(s) failed.", failures, total)).red());
         }
 
         Ok(())

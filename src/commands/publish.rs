@@ -344,7 +344,7 @@ impl CommandHandler for PublishHandler {
         let token = if self.dry_run {
             String::new()
         } else {
-            load_token().ok_or_else(|| {
+            tokio::task::block_in_place(load_token).ok_or_else(|| {
                 CommandError::FailedToWriteFile(std::io::Error::other(
                     "not logged in — run `oxide login` first",
                 ))

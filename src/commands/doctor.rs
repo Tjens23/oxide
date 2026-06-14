@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use console::{Alignment, pad_str, style};
 use serde_json::Value;
 
 use crate::{
@@ -108,7 +109,7 @@ impl CommandHandler for DoctorHandler {
             }
         }
 
-        match load_token() {
+        match tokio::task::block_in_place(load_token) {
             Some(_) => checks.push(Check::pass("auth token", "found in credential store")),
             None => checks.push(Check::fail(
                 "auth token",
@@ -116,13 +117,28 @@ impl CommandHandler for DoctorHandler {
             )),
         }
 
-        println!("{:<20} {:<8} Detail", "Check", "Status");
-        println!("{}", "-".repeat(72));
+        let check_hdr = format!("{}", style("Check").bold());
+        let status_hdr = format!("{}", style("Status").bold());
+        println!(
+            "{} {} Detail",
+            pad_str(&check_hdr, 20, Alignment::Left, None),
+            pad_str(&status_hdr, 8, Alignment::Left, None)
+        );
+        println!("{}", style("-".repeat(72)).dim());
 
         let mut failures = 0usize;
         for check in &checks {
-            let status = if check.passed { "pass" } else { "FAIL" };
-            println!("{:<20} {:<8} {}", check.label, status, check.detail);
+            let status_str = if check.passed {
+                format!("{}", style("pass").green().bold())
+            } else {
+                format!("{}", style("FAIL").red().bold())
+            };
+            println!(
+                "{} {} {}",
+                pad_str(check.label, 20, Alignment::Left, None),
+                pad_str(&status_str, 8, Alignment::Left, None),
+                check.detail
+            );
             if !check.passed {
                 failures += 1;
             }
@@ -130,9 +146,9 @@ impl CommandHandler for DoctorHandler {
 
         println!();
         if failures == 0 {
-            println!("All checks passed.");
+            println!("{}", style("All checks passed.").green());
         } else {
-            println!("{} check(s) failed.", failures);
+            println!("{}", style(format!("{} check(s) failed.", failures)).red());
         }
 
         Ok(())

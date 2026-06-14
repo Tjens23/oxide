@@ -11,6 +11,7 @@ use std::{
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use console::style;
 
 use crate::util::{self, TaskAllocator};
 use crate::{
@@ -217,7 +218,7 @@ impl Installer {
                         &store_dir,
                     ) {
                         Ok(_) => match progress {
-                            InstallProgress::Logging => println!("Installed '{}'", strf),
+                            InstallProgress::Logging => println!("{}", style(format!("Installed '{}'", strf)).green()),
                             InstallProgress::Bar(pb) => {
                                 pb.inc(1);
                                 pb.set_message(format!("Installed '{}'", strf));

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use console::style;
 use std::env::Args;
 
 use crate::errors::{
@@ -87,7 +88,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
 
     command_handler.parse(&mut remaining.into_iter())?;
     if let Err(e) = command_handler.execute().await {
-        println!("Command error: {e}");
+        eprintln!("{} {e}", style("Command error:").red().bold());
     }
 
     Ok(())
