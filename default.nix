@@ -1,16 +1,16 @@
 let
-  pkgs = import <nixpkgs> {};
+  pkgs = import <nixpkgs> { };
 in
 
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "oxide";
-  version = "0.12.4";
+  version = "0.13.0";
 
   src = pkgs.fetchFromGitHub {
     owner = "Tjens23";
     repo = pname;
     rev = "v${version}";
-    hash = "sha256-nFweX3jU7eNGX0beCBwt7W2EP84+CYvq+LBILYd0fy0=";
+    hash = "sha256-8Rl16on6pPc93J9wbWFfgmwXLSm8DB5amVeVx337veE=";
   };
 
   cargoHash = "sha256-UYzCJI+KIiVXoeg+9k79YRcUfDynWjGbNAGIcJdx6yg=";

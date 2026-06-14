@@ -73,7 +73,7 @@ impl CommandHandler for LoginHandler {
             Err(e) => return Err(e),
         };
 
-        save_token(&token)?;
+        tokio::task::block_in_place(|| save_token(&token))?;
         println!("Logged in — token saved to OS credential store");
         Ok(())
     }
@@ -111,7 +111,7 @@ async fn web_login(client: &reqwest::Client) -> Result<String, CommandError> {
     print!("Press ENTER to open in the browser...");
     io::stdout().flush().unwrap();
     io::stdin().lock().read_line(&mut String::new()).unwrap();
-    let _ = open::that(&init.login_url);
+    let _ = tokio::task::block_in_place(|| open::that(&init.login_url));
 
     const MAX_POLL_ATTEMPTS: u32 = 60; // 60 × 2 s = 2-minute timeout
     const PROGRESS_INTERVAL: u32 = 15; // print progress every 15 attempts (30 seconds)
