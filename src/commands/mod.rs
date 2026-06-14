@@ -15,6 +15,7 @@ pub mod publish;
 pub mod run;
 #[path = "self-upgrade.rs"]
 pub mod self_upgrade;
+pub mod search;
 pub mod uninstall;
 pub mod unlink;
 pub mod upgrade;
