@@ -21,23 +21,17 @@ pub struct Dist {
 impl Dist {
     pub fn verify(&self, bytes: &bytes::Bytes) -> bool {
         if let Some(ref integrity) = self.integrity {
-            // sha512 integrity is the only algorithm we accept (CWE-327).
             return util::verify_integrity(bytes, integrity);
         }
         if self.shasum.is_some() {
-            // SHA-1 is cryptographically broken and vulnerable to collision
-            // attacks. Packages that only advertise a SHA-1 checksum and no
-            // sha512 integrity field are rejected rather than verified with a
-            // broken algorithm (CWE-327).
+          
             eprintln!(
                 "Security warning: package provides only a SHA-1 checksum (no sha512 integrity \
                  field). Installation refused to avoid accepting a potentially tampered package."
             );
             return false;
         }
-        // No integrity data at all — refuse rather than silently trusting the
-        // bytes (was previously returning `true`, which skipped all checks).
-        eprintln!(
+       eprintln!(
             "Security warning: package provides no integrity data. \
              Installation refused."
         );
@@ -70,3 +64,22 @@ impl PackageLock {
 }
 
 pub type DependencyMap = HashMap<String, PackageLock>;
+
+
+#[derive(Debug, Deserialize)]
+pub struct SearchResponse {
+    pub objects: Vec<SearchObject>,
+    pub total: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchObject {
+    pub package: SearchPackage,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchPackage {
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+}

@@ -2,7 +2,7 @@ use bytes::Bytes;
 
 use crate::{
     errors::CommandError::{self, *},
-    types::{PackageData, VersionData},
+    types::{PackageData, SearchResponse, VersionData},
 };
 
 pub const REGISTRY_URL: &str = "https://registry.npmjs.org";
@@ -13,9 +13,6 @@ const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
 /// Maximum bytes buffered for a JSON registry API response (64 MiB).
 const MAX_REGISTRY_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Rejects any URL whose scheme is not `https`.
-/// Guards against CWE-319 (cleartext transmission) and limits the SSRF
-/// (CWE-918) surface by refusing non-encrypted transports.
 fn require_https(url: &str) -> Result<(), CommandError> {
     let parsed = reqwest::Url::parse(url).map_err(|_| InsecureUrl(url.to_string()))?;
     if parsed.scheme() != "https" {
@@ -37,10 +34,6 @@ impl HTTPRequest {
             .await
             .map_err(HTTPFailed)?;
 
-        // Reject before buffering if the server advertises a body that exceeds
-        // the limit (CWE-770). Servers without Content-Length are still capped
-        // implicitly by the 512 MiB ceiling enforced by `.bytes()` memory pressure,
-        // but an explicit check here provides an early, clean error.
         if let Some(len) = resp.content_length() {
             if len > MAX_DOWNLOAD_BYTES {
                 return Err(ResponseTooLarge(len));
@@ -91,5 +84,38 @@ impl HTTPRequest {
     ) -> Result<PackageData, CommandError> {
         let response_raw = Self::registry(client, format!("/{package_name}")).await?;
         serde_json::from_str::<PackageData>(&response_raw).map_err(ParsingFailed)
+    }
+
+    pub async fn search(
+        client: reqwest::Client,
+        query: &str,
+        size: u8,
+        from: u32,
+    ) -> Result<SearchResponse, CommandError> {
+        let mut url = reqwest::Url::parse(&format!("{REGISTRY_URL}/-/v1/search"))
+            .map_err(|_| InsecureUrl(String::from("failed to parse search URL")))?;
+        url.query_pairs_mut()
+            .append_pair("text", query)
+            .append_pair("size", &size.to_string())
+            .append_pair("from", &from.to_string());
+
+        let resp = client
+            .get(url)
+            .header(
+                "Accept",
+                "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*",
+            )
+            .send()
+            .await
+            .map_err(HTTPFailed)?;
+
+        if let Some(len) = resp.content_length() {
+            if len > MAX_REGISTRY_BYTES {
+                return Err(ResponseTooLarge(len));
+            }
+        }
+
+        let body = resp.text().await.map_err(FailedResponseText)?;
+        serde_json::from_str::<SearchResponse>(&body).map_err(ParsingFailed)
     }
 }

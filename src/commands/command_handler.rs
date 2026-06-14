@@ -23,6 +23,7 @@ use super::self_upgrade::SelfUpgradeHandler;
 use super::uninstall::UninstallHandler;
 use super::unlink::UnlinkHandler;
 use super::upgrade::UpgradeHandler;
+use super::search::SearchHandler;
 use super::version::VersionHandler;
 use super::why::WhyHandler;
 use super::workspaces::WorkspacesHandler;
@@ -80,6 +81,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         "dlx" | "bunx" => Box::new(DlxHandler::default()),
         "workspaces" | "ws" => Box::new(WorkspacesHandler::default()),
         "foreach" | "each" => Box::new(ForeachHandler::default()),
+        "search" => Box::new(SearchHandler::default()),
         _ => return Err(CommandNotFound(command.to_string())),
     };
 
@@ -124,6 +126,7 @@ fn print_global_help() {
             "List workspace packages defined in this monorepo",
         ),
         ("foreach", "Run a script across workspace packages"),
+        ("search", "Search for packages on the npm registry"),
         ("help", "Show help for oxide or a specific command"),
     ] {
         println!("  {:<14} {}", name, description);
@@ -301,6 +304,15 @@ fn print_command_help(command: &str) {
                     "Only run in packages matching the pattern",
                 ),
                 ("--bail", "Stop on first failure"),
+                ("--help, -h", "Show this help"),
+            ],
+        ),
+        "search" => print_help(
+            "search <query> [flags]",
+            "Search for packages on the npm registry.",
+            &[
+                ("-n, --limit <n>", "Number of results to return (default 20, max 250)"),
+                ("--from <offset>", "Offset for paginating results (default 0)"),
                 ("--help, -h", "Show this help"),
             ],
         ),
