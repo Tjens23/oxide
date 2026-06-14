@@ -88,7 +88,7 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
 
     command_handler.parse(&mut remaining.into_iter())?;
     if let Err(e) = command_handler.execute().await {
-        println!("{} {e}", style("Command error:").red().bold());
+        eprintln!("{} {e}", style("Command error:").red().bold());
     }
 
     Ok(())
