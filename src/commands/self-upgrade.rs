@@ -6,9 +6,7 @@ use crate::errors::{CommandError, ParseError};
 
 use super::command_handler::CommandHandler;
 
-const GITHUB_API_LATEST: &str = "https://api.github.com/repos/tjens23/oxide/releases/latest";
-
-const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+use crate::update_check::{CURRENT_VERSION, GITHUB_API_LATEST};
 
 #[derive(Deserialize)]
 struct ReleaseAsset {
