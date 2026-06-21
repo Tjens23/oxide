@@ -76,6 +76,7 @@ cargo build --release
 | `workspaces`          | List workspace packages defined in this monorepo        |
 | `foreach <script>`    | Run a script across all workspace packages              |
 | `version`             | Bump package.json version, commit, and create a git tag |
+| `search`             | Search npm registry for a package |
 
 ## Usage
 
