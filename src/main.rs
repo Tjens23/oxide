@@ -6,6 +6,7 @@ mod errors;
 mod http;
 mod installer;
 mod types;
+mod update_check;
 mod util;
 mod versions;
 mod workspace;

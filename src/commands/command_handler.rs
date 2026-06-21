@@ -46,6 +46,11 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         }
     };
 
+    if command == "-v" || command == "--version" {
+        print_version().await;
+        return Ok(());
+    }
+
     if command.eq_ignore_ascii_case("help") || command == "--help" || command == "-h" {
         match args.next().as_deref() {
             Some(sub) => print_command_help(sub),
@@ -91,7 +96,35 @@ pub async fn handle_args(mut args: Args) -> Result<(), ParseError> {
         eprintln!("{} {e}", style("Command error:").red().bold());
     }
 
+    if let Some(newer) = crate::update_check::check_for_update_cached() {
+        eprintln!(
+            "{} Run 'oxide self-upgrade' to update.",
+            style(format!("A new version of oxide is available: v{}.", newer))
+                .yellow()
+                .bold()
+        );
+    }
+
     Ok(())
+}
+
+async fn print_version() {
+    println!("oxide v{}", crate::update_check::CURRENT_VERSION);
+    match crate::update_check::fetch_latest_version_fresh().await {
+        Some(latest) => {
+            if latest != crate::update_check::CURRENT_VERSION {
+                println!(
+                    "Latest: v{} — run 'oxide self-upgrade' to update.",
+                    latest
+                );
+            } else {
+                println!("Latest: v{} (up to date)", latest);
+            }
+        }
+        None => {
+            println!("Could not fetch latest version (offline?).");
+        }
+    }
 }
 
 fn print_global_help() {

@@ -35,6 +35,17 @@ impl CommandHandler for DlxHandler {
             .ok_or_else(|| ParseError::MissingArgument("<package>".to_string()))?;
 
         let rest: Vec<String> = args.collect();
+
+        // `oxide dlx create foo@ver [args]` → rewrite to `oxide dlx create-foo@ver [args]`,
+        // matching the npm/yarn `create` shorthand convention.
+        if self.package_spec == "create" {
+            if let Some(pkg_arg) = rest.first().filter(|s| !s.is_empty() && !s.starts_with('-')) {
+                self.package_spec = format!("create-{}", pkg_arg);
+                self.bin_args = rest[1..].to_vec();
+                return Ok(());
+            }
+        }
+
         if let Some(first) = rest.first()
             && !first.starts_with('-')
         {
